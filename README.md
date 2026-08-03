@@ -14,6 +14,7 @@ A Russian guide is available in [README.ru.md](README.ru.md).
 ## Installation
 
 ```bash
+composer config repositories.componenta-app-roadrunner vcs https://github.com/componenta/app-roadrunner.git
 composer require componenta/app-roadrunner:dev-dev
 composer require --dev spiral/roadrunner-cli:^2.7
 vendor/bin/rr get-binary
