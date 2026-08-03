@@ -1,0 +1,76 @@
+{
+    "name": "componenta/app-roadrunner",
+    "description": "RoadRunner HTTP worker runtime for Componenta applications",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "componenta",
+        "roadrunner",
+        "application-server",
+        "psr-7",
+        "psr-15",
+        "long-running"
+    ],
+    "require": {
+        "componenta/app": "dev-dev",
+        "componenta/app-http": "dev-dev",
+        "componenta/config": "^1.0",
+        "componenta/di": "^1.0",
+        "componenta/middleware-factory": "^1.0",
+        "componenta/path-resolver": "^1.0",
+        "componenta/pipeline": "^1.0",
+        "componenta/scope": "^1.0",
+        "php": "^8.4",
+        "psr/container": "^2.0",
+        "psr/http-factory": "^1.0.1",
+        "psr/http-message": "^2.0",
+        "psr/http-server-middleware": "^1.0",
+        "spiral/roadrunner-http": "^4.1",
+        "spiral/roadrunner-worker": "^3.5"
+    },
+    "require-dev": {
+        "componenta/http-emitter": "^1.0",
+        "nyholm/psr7": "^1.8",
+        "nyholm/psr7-server": "^1.1",
+        "pestphp/pest": "^4.0",
+        "phpstan/phpstan": "^2.1",
+        "spiral/roadrunner-cli": "^2.7"
+    },
+    "autoload": {
+        "psr-4": {
+            "Componenta\\App\\RoadRunner\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Componenta\\App\\RoadRunner\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "analyse": "@php vendor/bin/phpstan analyse",
+        "test": "@php vendor/bin/pest",
+        "check": [
+            "@analyse",
+            "@test"
+        ]
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        },
+        "sort-packages": true
+    },
+    "extra": {
+        "componenta": {
+            "config-providers": [
+                "Componenta\\App\\RoadRunner\\ConfigProvider"
+            ]
+        }
+    },
+    "suggest": {
+        "ext-protobuf": "Improves RoadRunner protocol performance",
+        "spiral/roadrunner-cli": "Downloads and manages the RoadRunner server binary"
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

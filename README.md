@@ -1,0 +1,187 @@
+# Componenta App RoadRunner
+
+`componenta/app-roadrunner` runs Componenta's existing HTTP application pipeline
+inside a RoadRunner worker. It keeps `Componenta\App\Scope::HTTP`, the normal
+HTTP bootloaders, middleware configuration, routing, and error handling.
+
+The package owns only the RoadRunner transport lifecycle. Application services
+that retain request data must expose their own cleanup through
+`RequestResetterInterface`; this package does not inspect private framework,
+Cycle, or PHP runtime state.
+
+A Russian guide is available in [README.ru.md](README.ru.md).
+
+## Installation
+
+```bash
+composer require componenta/app-roadrunner:dev-dev
+composer require --dev spiral/roadrunner-cli:^2.7
+vendor/bin/rr get-binary
+```
+
+Copy the worker entry point and the example server configuration into the
+application:
+
+```bash
+cp vendor/componenta/app-roadrunner/resources/bin/roadrunner.php bin/roadrunner.php
+cp vendor/componenta/app-roadrunner/resources/.rr.yaml .rr.yaml
+```
+
+The Componenta Composer plugin discovers
+`Componenta\App\RoadRunner\ConfigProvider` from the package metadata. If the
+application maintains its provider list manually, add this provider after the
+standard `Componenta\App\Server\ConfigProvider`.
+
+Rebuild Componenta's production cache after installing the package or changing
+its configuration:
+
+```bash
+php bin/console.php app:build
+```
+
+Build and publish caches before starting or reloading the worker pool. Workers
+must only read completed shared artifacts; they must not race to generate config,
+container, discovery, route, DI, or ORM caches during concurrent boot. Restart
+all workers after a cache or code deployment so no long-lived container keeps
+the previous release.
+
+Start the server:
+
+```bash
+./rr serve -c .rr.yaml
+```
+
+## Runtime selection
+
+`Componenta\App\RoadRunner\AppFactory` replaces the default concrete app
+factory while keeping Componenta's public `AppFactoryInterface`. It selects the
+RoadRunner app only when RoadRunner sets `RR_MODE=http`. Outside a RoadRunner
+worker it delegates to Componenta's default factory, so the existing FPM, SAPI,
+and CLI entry points keep the same behavior. The RoadRunner app implements
+`HttpBootTargetInterface` directly, and the standard `componenta/app-http`
+adapter uses it without an integration-specific adapter.
+
+There is no separate RoadRunner scope and no manual `always` mode. Starting the
+RoadRunner app without the RoadRunner worker protocol would be invalid, while
+forcing the SAPI app inside a worker would corrupt that protocol.
+
+## Request lifecycle
+
+The RoadRunner app:
+
+1. builds the configured PSR-15 middleware pipeline once;
+2. refreshes RoadRunner's `$_SERVER` baseline after Componenta boot completes;
+3. receives PSR-7 requests through the official `PSR7Worker`;
+4. handles every request through the same Componenta pipeline;
+5. prepares and sends the PSR-7 response;
+6. runs configured request resetters in declaration order;
+7. clears output buffers opened by the request;
+8. accepts the next request.
+
+Middleware priority and equal-priority registration order match
+`componenta/app-http`.
+
+An unhandled pipeline exception becomes an empty generic `500` response. Invalid
+RoadRunner request data becomes an empty generic `400`. A transport or cleanup
+failure exits the worker with code `1`, allowing RoadRunner to replace a process
+whose state is no longer trusted.
+
+## Request state
+
+The package automatically clears Componenta's
+`CurrentUserProviderInterface` after application resetters run. Other mutable
+shared services must register an explicit resetter:
+
+```php
+namespace App\Infrastructure\Reset;
+
+use App\Tenant\TenantContext;
+use Componenta\App\RoadRunner\Reset\RequestResetterInterface;
+
+final readonly class TenantContextResetter implements RequestResetterInterface
+{
+    public function __construct(private TenantContext $context) {}
+
+    public function reset(): void
+    {
+        $this->context->clear();
+    }
+}
+```
+
+Register its service id in execution order:
+
+```php
+return [
+    'roadrunner' => [
+        'resetters' => [
+            App\Infrastructure\Reset\TenantContextResetter::class,
+        ],
+    ],
+];
+```
+
+All resetters are attempted even if one fails. Failures are aggregated into
+`ResetFailedException`, and the worker exits after cleanup.
+
+Cycle transactions, `EntityManager`, ORM heap, tenant context, locale, profiler
+state, and similar mutable services belong to their owning integration. Register
+resetters for the services used by the application. Do not store request objects
+or users in static properties or long-lived controller properties. Keep
+RoadRunner's `max_jobs` limit as a final guard against third-party leaks and
+memory fragmentation.
+
+## Configuration
+
+```php
+return [
+    'roadrunner' => [
+        'http' => [
+            'chunk_size' => 0,
+        ],
+        'worker' => [
+            'intercept_side_effects' => true,
+        ],
+        'resetters' => [],
+    ],
+];
+```
+
+- `roadrunner.http.chunk_size` controls RoadRunner's streamed PSR-7 response
+  mode. The default `0` lets the official worker materialize the body and also
+  supports non-seekable PSR-7 streams. A positive value requires rewindable
+  response bodies.
+- `roadrunner.worker.intercept_side_effects` protects the Goridge protocol from
+  accidental PHP output to stdout.
+- `roadrunner.resetters` is an ordered list of container service ids implementing
+  `RequestResetterInterface`.
+
+A copyable configuration file is included at
+`resources/config/autoload/roadrunner.global.php`.
+
+## Response transport
+
+`ResponsePreparer` preserves the observable HTTP response semantics for `HEAD`,
+informational and bodyless statuses, full responses, `206 Content-Range`,
+non-seekable streams, `X-Sendfile`, and `X-Accel-Redirect`. It performs
+RoadRunner-specific transport normalization before the response crosses
+Goridge, so internal PSR-7 headers and body objects are not guaranteed to be
+identical to those passed to Componenta's SAPI emitter.
+
+To use `X-Sendfile`, enable RoadRunner's sendfile middleware:
+
+```yaml
+http:
+  middleware: ["sendfile"]
+```
+
+## Public API
+
+- `ConfigProvider` wires the integration into Componenta's application factory.
+- `App` is the long-running HTTP application and also its HTTP boot target.
+- `RequestResetterInterface` is the application cleanup extension point.
+- `ResetFailedException` exposes all cleanup failures through its `failures`
+  property.
+
+The worker loop and factory are container-managed infrastructure; application
+code normally interacts only with `RequestResetterInterface`.

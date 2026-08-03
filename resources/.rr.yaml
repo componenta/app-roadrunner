@@ -1,0 +1,17 @@
+version: "3"
+
+server:
+  command: "php bin/roadrunner.php"
+
+http:
+  address: 0.0.0.0:8080
+  access_logs: true
+  pool:
+    num_workers: 0
+    max_jobs: 1000
+    allocate_timeout: 60s
+    destroy_timeout: 60s
+
+logs:
+  level: info
+  mode: production
