@@ -12,10 +12,10 @@
         "long-running"
     ],
     "require": {
-        "componenta/app": "dev-dev",
-        "componenta/app-http": "dev-dev",
+        "componenta/app": "^1.0",
+        "componenta/app-http": "^1.0",
         "componenta/config": "^1.0",
-        "componenta/di": "^1.0",
+        "componenta/di": "^2.0",
         "componenta/middleware-factory": "^1.0",
         "componenta/path-resolver": "^1.0",
         "componenta/pipeline": "^1.0",
@@ -74,6 +74,6 @@
         "ext-protobuf": "Improves RoadRunner protocol performance",
         "spiral/roadrunner-cli": "Downloads and manages the RoadRunner server binary"
     },
-    "minimum-stability": "dev",
+    "minimum-stability": "stable",
     "prefer-stable": true
 }
