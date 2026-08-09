@@ -12,10 +12,10 @@
         "long-running"
     ],
     "require": {
-        "componenta/app": "^1.0",
+        "componenta/app": "^1.0 || ^2.0",
         "componenta/app-http": "^1.0",
-        "componenta/config": "^1.0",
-        "componenta/di": "^2.0",
+        "componenta/config": "^1.0 || ^2.0",
+        "componenta/di": "^2.0 || ^3.0",
         "componenta/middleware-factory": "^1.0",
         "componenta/path-resolver": "^1.0",
         "componenta/pipeline": "^1.0",
@@ -61,9 +61,6 @@
         "sort-packages": true
     },
     "extra": {
-        "branch-alias": {
-            "dev-dev": "1.0.x-dev"
-        },
         "componenta": {
             "config-providers": [
                 "Componenta\\App\\RoadRunner\\ConfigProvider"

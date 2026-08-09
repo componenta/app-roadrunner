@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.1.0 - 2026-08-09
+
+- Declared stable compatibility with Componenta App 2, Config 2, and DI 3 while
+  preserving support for their existing major versions.
+
+## 1.0.0 - 2026-08-08
+
 - Replaced the removed Componenta app-adapter contract with a conditional
   `AppFactoryInterface` implementation.
 - Removed the RoadRunner-specific boot-target adapter; the standard
