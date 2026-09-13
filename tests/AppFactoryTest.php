@@ -25,7 +25,6 @@ use Componenta\App\Server\App as SapiApp;
 use Componenta\App\Server\ConfigProvider as HttpConfigProvider;
 use Componenta\Config\Config;
 use Componenta\Config\ContainerValue;
-use Componenta\DI\ContainerBuilder;
 use Componenta\Http\EmitterInterface;
 use Componenta\Http\Middleware\MiddlewareFactory;
 use Componenta\Http\Middleware\PipelineFactoryInterface;
@@ -37,8 +36,6 @@ use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Spiral\RoadRunner\Http\PSR7WorkerInterface;
-
-use function Componenta\Config\config_merge;
 
 function roadRunnerAppFactoryContainer(): ContainerValue
 {
@@ -93,7 +90,7 @@ function roadRunnerAppFactoryContainer(): ContainerValue
 
     return new ContainerValue(
         new ServiceContainer($entries),
-        new Config($config),
+        new Config($config, new \Componenta\Config\Environment([])),
     );
 }
 
@@ -123,10 +120,11 @@ it('keeps factory aliases regardless of provider merge order', function (): void
     $roadRunner = (new ConfigProvider())();
 
     foreach ([
-        config_merge(config_merge($app, $http), $roadRunner),
-        config_merge(config_merge($roadRunner, $app), $http),
+        [$app, $http, $roadRunner],
+        [$roadRunner, $app, $http],
     ] as $config) {
-        $container = ContainerBuilder::configure(new Config($config))->build();
+        $composition = (new \Componenta\Config\ConfigFactory())->create(new \Componenta\Config\Environment([]), ...array_map(static fn (array $value): Closure => static fn (): array => $value, $config));
+        $container = (new \Componenta\DI\ContainerFactory())->create($composition->config, $composition->dependencies);
 
         expect($container->get(AppFactoryInterface::class))->toBeInstanceOf(RoadRunnerAppFactory::class)
             ->and($container->get(HttpBootTargetAdapter::class))->toBeInstanceOf(HttpBootTargetAdapter::class);

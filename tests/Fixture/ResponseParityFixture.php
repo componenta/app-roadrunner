@@ -33,8 +33,9 @@ final class ResponseParityFixture
                     'Content-Range' => 'bytes 2-4/6',
                     'X-Parity-Case' => 'range-206',
                 ],
-                'abcdef',
+                'cde',
             ),
+            '/range/416' => new Response(416, ['Content-Range' => 'bytes */20'], 'range unavailable'),
             '/stream/non-seekable' => new Response(
                 200,
                 ['Content-Type' => 'text/plain;charset=UTF-8', 'X-Parity-Case' => 'non-seekable'],

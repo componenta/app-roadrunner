@@ -10,13 +10,15 @@ use Nyholm\Psr7\ServerRequest;
 function emitSapiBody(string $path): string
 {
     $program = sprintf(
-        'require %s; $response = %s::create(%s); (new \\Componenta\\Http\\Emitter())->emit($response);',
-        var_export(dirname(__DIR__) . '/vendor/autoload.php', true),
+        '$loader = require %s; $loader->addPsr4(%s, %s); $response = %s::create(%s); (new \\Componenta\\Http\\Emitter())->emit($response);',
+        var_export(dirname((new ReflectionClass(\Composer\Autoload\ClassLoader::class))->getFileName(), 2) . '/autoload.php', true),
+        var_export('Componenta\\App\\RoadRunner\\Tests\\', true),
+        var_export(__DIR__, true),
         ResponseParityFixture::class,
         var_export($path, true),
     );
     $process = proc_open(
-        [PHP_BINARY, '-r', $program],
+        [PHP_BINARY, '-c', php_ini_loaded_file() ?: '', '-d', 'display_errors=stderr', '-r', $program],
         [
             0 => ['pipe', 'r'],
             1 => ['pipe', 'w'],
@@ -58,13 +60,13 @@ function prepareRoadRunnerBody(string $path): string
     return (string) $prepared->getBody();
 }
 
-it('preserves emitted body semantics across SAPI and RoadRunner runtimes', function (): void {
-    foreach ([
-        'full response' => '/full',
-        '205 response' => '/status/205',
-        '206 response' => '/range/206',
-        'non-seekable response' => '/stream/non-seekable',
-    ] as $case => $path) {
-        expect(prepareRoadRunnerBody($path), $case)->toBe(emitSapiBody($path));
-    }
-});
+it('preserves the expected body across SAPI and RoadRunner runtimes', function (string $path, string $expected): void {
+    expect(emitSapiBody($path))->toBe($expected)
+        ->and(prepareRoadRunnerBody($path))->toBe($expected);
+})->with([
+    'full response' => ['/full', 'abcdef'],
+    'reset content' => ['/status/205', ''],
+    'selected range' => ['/range/206', 'cde'],
+    'range error explanation' => ['/range/416', 'range unavailable'],
+    'non-seekable response' => ['/stream/non-seekable', 'abcdef'],
+]);

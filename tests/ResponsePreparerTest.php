@@ -34,16 +34,14 @@ it('preserves SAPI semantics for full, HEAD and bodyless responses', function ()
         ->and($noBody->hasHeader('Content-Type'))->toBeFalse()
         ->and($noBody->hasHeader('Content-Length'))->toBeFalse()
         ->and((string) $noBody->getBody())->toBe('')
-        ->and($resetContent->getHeaderLine('Content-Type'))->toBe('text/plain')
-        ->and($resetContent->getHeaderLine('Content-Length'))->toBe('6')
-        ->and($resetContent->getHeaderLine('Accept-Ranges'))->toBe('bytes')
-        ->and((string) $resetContent->getBody())->toBe('abcdef');
+        ->and($resetContent->hasHeader('Content-Length'))->toBeFalse()
+        ->and((string) $resetContent->getBody())->toBe('');
 });
 
-it('prepares a valid partial response in a bounded seekable stream', function (): void {
+it('preserves the prepared partial response body', function (): void {
     $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
         new ServerRequest('GET', '/'),
-        new Response(206, ['Content-Range' => 'bytes 2-4/6'], 'abcdef'),
+        new Response(206, ['Content-Range' => 'bytes 2-4/6'], 'cde'),
     );
 
     expect($prepared->getBody()->isSeekable())->toBeTrue()
@@ -51,13 +49,27 @@ it('prepares a valid partial response in a bounded seekable stream', function ()
         ->and((string) $prepared->getBody())->toBe('cde');
 });
 
-it('rejects a byte range beyond a known source size', function (): void {
-    $preparer = new ResponsePreparer(new Psr17Factory());
-
-    expect(fn () => $preparer->prepare(
+it('preserves a selected range whose representation offset exceeds its body size', function (): void {
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
         new ServerRequest('GET', '/'),
-        new Response(206, ['Content-Range' => 'bytes 2-3/4'], 'abc'),
-    ))->toThrow(InvalidArgumentException::class);
+        new Response(206, ['Content-Range' => 'bytes 10-12/20'], 'abc'),
+    );
+
+    expect((string) $prepared->getBody())->toBe('abc')
+        ->and($prepared->getHeaderLine('Content-Length'))->toBe('3')
+        ->and($prepared->getHeaderLine('Content-Range'))->toBe('bytes 10-12/20');
+});
+
+it('preserves the explanation and metadata of an unsatisfied range response', function (): void {
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('GET', '/'),
+        new Response(416, ['Content-Type' => 'text/plain', 'Content-Range' => 'bytes */20'], 'range unavailable'),
+    );
+
+    expect((string) $prepared->getBody())->toBe('range unavailable')
+        ->and($prepared->getHeaderLine('Content-Type'))->toBe('text/plain')
+        ->and($prepared->getHeaderLine('Content-Range'))->toBe('bytes */20')
+        ->and($prepared->getHeaderLine('Content-Length'))->toBe('17');
 });
 
 it('buffers the remaining bytes of a non-seekable response body', function (): void {
@@ -91,27 +103,15 @@ it('removes PHP body metadata from delegated file responses', function (): void 
         ->and((string) $prepared->getBody())->toBe('');
 });
 
-it('rejects malformed and internally inconsistent content ranges', function (): void {
-    $preparer = new ResponsePreparer(new Psr17Factory());
-    $request = new ServerRequest('GET', '/');
-
-    $malformedUnsatisfied = $preparer->prepare(
-        $request,
-        new Response(200, ['Content-Range' => 'bytes */garbage'], 'abcdef'),
-    );
-    $invalidTotal = $preparer->prepare(
-        $request,
-        new Response(206, ['Content-Range' => 'bytes 2-9/6'], 'abcdef'),
-    );
-    $caseInsensitive = $preparer->prepare(
-        $request,
-        new Response(206, ['Content-Range' => 'BYTES 2-4/6'], 'abcdef'),
+it('buffers a non-seekable selected range without interpreting representation offsets', function (): void {
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('GET', '/'),
+        new Response(206, ['Content-Range' => 'bytes 10-12/20'], new NonSeekableStream(Stream::create('abc'))),
     );
 
-    expect((string) $malformedUnsatisfied->getBody())->toBe('abcdef')
-        ->and($malformedUnsatisfied->getHeaderLine('Content-Length'))->toBe('6')
-        ->and((string) $invalidTotal->getBody())->toBe('abcdef')
-        ->and((string) $caseInsensitive->getBody())->toBe('cde');
+    expect((string) $prepared->getBody())->toBe('abc')
+        ->and($prepared->getHeaderLine('Content-Length'))->toBe('3')
+        ->and($prepared->getBody()->isSeekable())->toBeTrue();
 });
 
 it('does not add content length beside transfer encoding', function (): void {
@@ -132,7 +132,7 @@ it('is compatible with the official RoadRunner chunked PSR-7 transport', functio
 
     $worker->respond($preparer->prepare(
         new ServerRequest('GET', '/'),
-        new Response(206, ['Content-Range' => 'bytes 2-4/6'], 'abcdef'),
+        new Response(206, ['Content-Range' => 'bytes 2-4/6'], 'cde'),
     ));
 
     expect(implode('', array_map(
@@ -150,4 +150,15 @@ it('is compatible with the official RoadRunner chunked PSR-7 transport', functio
         static fn ($payload): string => $payload->body,
         $binaryWorker->responses,
     )))->toBe('forward');
+});
+
+it('preserves Content-Location and ETag on a bodyless 304 response', function (): void {
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('GET', '/documents/one'),
+        new Response(304, ['Content-Location' => '/documents/one', 'ETag' => '"one"'], 'discarded'),
+    );
+
+    expect($prepared->getHeaderLine('Content-Location'))->toBe('/documents/one')
+        ->and($prepared->getHeaderLine('ETag'))->toBe('"one"')
+        ->and((string) $prepared->getBody())->toBe('');
 });

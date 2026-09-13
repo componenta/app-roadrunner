@@ -8,49 +8,24 @@ use Componenta\App\RoadRunner\Tests\Fixture\CountingResetter;
 use Componenta\App\RoadRunner\Tests\Fixture\ServiceContainer;
 use Componenta\Config\Config;
 use Componenta\Config\ContainerValue;
-use Componenta\DI\Resolver\CurrentUserProvider;
-use Componenta\DI\Resolver\CurrentUserProviderInterface;
 
-it('builds the configured reset chain and clears the Componenta current user last', function (): void {
-    $provider = new CurrentUserProvider(new stdClass());
-    $sawCurrentUser = false;
-    $resetter = new class($provider, $sawCurrentUser) implements RequestResetterInterface {
-        public int $calls = 0;
-
-        public function __construct(
-            private CurrentUserProvider $provider,
-            private bool &$sawCurrentUser,
-        ) {}
-
-        public function reset(): void
-        {
-            ++$this->calls;
-            $this->sawCurrentUser = $this->provider->getUser() !== null;
-        }
-    };
+it('resets each configured service once even when an id is repeated', function (): void {
+    $first = new CountingResetter();
+    $second = new CountingResetter();
     $container = new ContainerValue(
-        new ServiceContainer([
-            'application.resetter' => $resetter,
-            CurrentUserProviderInterface::class => $provider,
-        ]),
-        new Config([
-            'roadrunner' => [
-                'resetters' => ['application.resetter', 'application.resetter'],
-            ],
-        ]),
+        new ServiceContainer(['first' => $first, 'second' => $second]),
+        new Config(['roadrunner' => ['resetters' => ['first', 'second', 'first']]], new \Componenta\Config\Environment([])),
     );
 
     (new RequestResetterFactory())($container)->reset();
 
-    expect($resetter->calls)->toBe(1)
-        ->and($sawCurrentUser)->toBeTrue()
-        ->and($provider->getUser())->toBeNull();
+    expect($first->resetCalls)->toBe(1)->and($second->resetCalls)->toBe(1);
 });
 
 it('rejects invalid resetter configuration', function (array $resetters): void {
     $container = new ContainerValue(
         new ServiceContainer([]),
-        new Config(['roadrunner' => ['resetters' => $resetters]]),
+        new Config(['roadrunner' => ['resetters' => $resetters]], new \Componenta\Config\Environment([])),
     );
 
     expect(fn () => (new RequestResetterFactory())($container))
@@ -64,7 +39,7 @@ it('rejects invalid resetter configuration', function (array $resetters): void {
 it('rejects a configured service with the wrong contract', function (): void {
     $container = new ContainerValue(
         new ServiceContainer(['invalid' => new stdClass()]),
-        new Config(['roadrunner' => ['resetters' => ['invalid']]]),
+        new Config(['roadrunner' => ['resetters' => ['invalid']]], new \Componenta\Config\Environment([])),
     );
 
     expect(fn () => (new RequestResetterFactory())($container))

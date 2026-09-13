@@ -5,3 +5,7 @@
 /.phpunit.result.cache
 /rr
 /rr.exe
+/.phpstan.cache/
+vendor/
+.phpunit.cache/
+integration/composer.lock

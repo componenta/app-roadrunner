@@ -89,9 +89,8 @@ whose state is no longer trusted.
 
 ## Request state
 
-The package automatically clears Componenta's
-`CurrentUserProviderInterface` after application resetters run. Other mutable
-shared services must register an explicit resetter:
+Mutable shared services register an explicit resetter. DI 5 has no current-user
+provider; applications own user context and its cleanup:
 
 ```php
 namespace App\Infrastructure\Reset;
@@ -168,6 +167,10 @@ non-seekable streams, `X-Sendfile`, and `X-Accel-Redirect`. It performs
 RoadRunner-specific transport normalization before the response crosses
 Goridge, so internal PSR-7 headers and body objects are not guaranteed to be
 identical to those passed to Componenta's SAPI emitter.
+
+A `206` response must already contain the selected range in its PSR-7 body. The
+preparer transfers that body without applying the representation offset again.
+It preserves explanatory bodies on `416` responses and suppresses content on `205`.
 
 To use `X-Sendfile`, enable RoadRunner's sendfile middleware:
 

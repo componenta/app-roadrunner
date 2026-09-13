@@ -7,7 +7,6 @@ namespace Componenta\App\RoadRunner\Reset;
 use Componenta\App\RoadRunner\ConfigKey;
 use Componenta\Config\ConfigPath;
 use Componenta\Config\ContainerValue;
-use Componenta\DI\Resolver\CurrentUserProviderInterface;
 use InvalidArgumentException;
 
 final readonly class RequestResetterFactory
@@ -34,13 +33,6 @@ final readonly class RequestResetterFactory
             }
 
             $resetters[] = $container->get($serviceId, RequestResetterInterface::class);
-        }
-
-        if ($container->has(CurrentUserProviderInterface::class)) {
-            $resetters[] = new CurrentUserResetter($container->get(
-                CurrentUserProviderInterface::class,
-                CurrentUserProviderInterface::class,
-            ));
         }
 
         return new CompositeRequestResetter($this->deduplicate($resetters));
