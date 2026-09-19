@@ -54,11 +54,11 @@ Start the server:
 
 ## Runtime selection
 
-`Componenta\App\RoadRunner\AppFactory` replaces the default concrete app
-factory while keeping Componenta's public `AppFactoryInterface`. It selects the
-RoadRunner app only when RoadRunner sets `RR_MODE=http`. Outside a RoadRunner
-worker it delegates to Componenta's default factory, so the existing FPM, SAPI,
-and CLI entry points keep the same behavior. The RoadRunner app implements
+The provider decorates `Componenta\App\Server\HttpAppAdapter` through DI with
+`Componenta\App\RoadRunner\HttpAppAdapter`. The shared application factory selects
+the HTTP adapter normally. It creates the RoadRunner app when `RR_MODE=http` and
+delegates to the original HTTP adapter outside a worker. Provider order does not
+change this selection; CLI and WebSocket adapters retain their behavior. The RoadRunner app implements
 `HttpBootTargetInterface` directly, and the standard `componenta/app-http`
 adapter uses it without an integration-specific adapter.
 

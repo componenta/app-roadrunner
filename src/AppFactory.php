@@ -11,6 +11,7 @@ use Componenta\App\Scope;
 use Componenta\Config\ContainerValue;
 use Componenta\Scope\ScopeInterface;
 
+/** Compatibility entry point; ConfigProvider integrates through HttpAppAdapter. */
 final readonly class AppFactory implements AppFactoryInterface
 {
     public function createApp(ScopeInterface $scope, ContainerValue $container): AppInterface

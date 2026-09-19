@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Componenta\App\RoadRunner;
 
-use Componenta\App\AppFactory as DefaultAppFactory;
+use Componenta\App\AppAdapterInterface;
+use Componenta\App\Server\HttpAppAdapter as SapiHttpAppAdapter;
 use Componenta\App\RoadRunner\Http\ResponsePreparer;
 use Componenta\App\RoadRunner\Reset\RequestResetterFactory;
 use Componenta\App\RoadRunner\Reset\RequestResetterInterface;
@@ -30,16 +31,17 @@ final class ConfigProvider extends BaseConfigProvider
     protected function getInvokables(): array
     {
         return [
-            AppFactory::class,
             Psr7WorkerFactory::class,
             RequestResetterFactory::class,
         ];
     }
 
-    protected function getAliases(): array
+    protected function getDelegators(): array
     {
         return [
-            DefaultAppFactory::class => AppFactory::class,
+            SapiHttpAppAdapter::class => [
+                static fn (AppAdapterInterface $inner): AppAdapterInterface => new HttpAppAdapter($inner),
+            ],
         ];
     }
 

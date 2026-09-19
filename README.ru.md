@@ -47,10 +47,11 @@ php bin/console.php app:build
 
 ## Выбор среды выполнения
 
-`Componenta\App\RoadRunner\AppFactory` заменяет конкретную фабрику приложения,
-сохраняя публичный `AppFactoryInterface`. RoadRunner-приложение выбирается
-только при `RR_MODE=http`. Вне воркера фабрика делегирует стандартной фабрике
-Componenta, поэтому точки входа FPM, SAPI и CLI сохраняют прежнее поведение.
+Провайдер декорирует `Componenta\App\Server\HttpAppAdapter` через DI адаптером
+`Componenta\App\RoadRunner\HttpAppAdapter`. Общая фабрика приложения выбирает
+HTTP-adapter обычным способом. При `RR_MODE=http` он создаёт RoadRunner-приложение,
+а вне воркера делегирует исходному HTTP-adapter. Порядок провайдеров не меняет
+выбор реализации; CLI и WebSocket сохраняют своё поведение.
 RoadRunner-приложение само реализует `HttpBootTargetInterface`, а стандартный
 адаптер `componenta/app-http` использует его без отдельного интеграционного адаптера.
 
