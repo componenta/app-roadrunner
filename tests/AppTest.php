@@ -327,3 +327,26 @@ it('cleans up and discards the worker when releasing a request throws', function
         ->and((string) $worker->responses[0]->getBody())->toBe('ok')
         ->and($resetter->resetCalls)->toBe(1);
 });
+
+it('rejects an informational response as the only response and reuses the clean worker', function (int $status): void {
+    $worker = new FakePsr7Worker([
+        new ServerRequest('GET', '/interim'),
+        new ServerRequest('GET', '/next'),
+        null,
+    ]);
+    $resetter = new CountingResetter();
+    $app = makeRoadRunnerApp(
+        $worker,
+        new FakePipelineFactory(static fn (ServerRequest $request): Response =>
+            $request->getUri()->getPath() === '/interim'
+                ? new Response($status)
+                : new Response(200, [], 'next')),
+        $resetter,
+    );
+
+    expect($app->run())->toBeNull()
+        ->and(array_map(static fn ($response): int => $response->getStatusCode(), $worker->responses))->toBe([500, 200])
+        ->and((string) $worker->responses[0]->getBody())->toBe('')
+        ->and((string) $worker->responses[1]->getBody())->toBe('next')
+        ->and($resetter->resetCalls)->toBe(2);
+})->with([100, 101, 102, 103, 199]);

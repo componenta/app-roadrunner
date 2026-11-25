@@ -62,6 +62,7 @@ $app->pipe(new CallableMiddleware(static function (ServerRequestInterface $reque
 
     return match ($path) {
         '/full' => new Response(200, $headers, 'abcdef'),
+        '/interim' => new Response(103, ['Link' => '</style.css>; rel=preload']),
         '/broken-known' => new Response(200, $headers, new FailingReadStream(16384)),
         '/broken-unknown' => new Response(200, $headers, new FailingReadStream(null)),
         '/partial' => new Response(206, $headers + ['Content-Range' => 'bytes 10-12/20'], 'abc'),

@@ -96,6 +96,8 @@ logs:
                 assert check("/not-modified", 304, b"")["etag"] == '"v1"'
                 check("/output", 200, b"clean")
                 check("/failure", 500, b"")
+                check("/interim", 500, b"")
+                assert check("/full", 200, b"abcdef")["x-worker-pid"] == pid
 
                 for identity in ("alice", "bob"):
                     status, headers, body = request("/state", headers={"X-Identity": identity})
