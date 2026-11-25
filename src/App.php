@@ -246,7 +246,7 @@ final class App implements AppInterface, HttpBootTargetInterface
                 'level' => $buffer['level'],
                 'chunk_size' => $buffer['chunk_size'],
             ],
-            ob_get_status(true),
+            array_values(ob_get_status(true)),
         );
     }
 

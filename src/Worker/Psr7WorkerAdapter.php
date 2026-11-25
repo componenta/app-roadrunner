@@ -43,16 +43,21 @@ final readonly class Psr7WorkerAdapter implements PSR7WorkerInterface
 
     public function respond(ResponseInterface $response): void
     {
-        if ($this->chunkSize === 0) {
-            $this->worker->respond($response);
-            return;
-        }
-
         $http = $this->worker->getHttpWorker();
         $status = $response->getStatusCode();
 
         if ($status < 200) {
             $http->respond($status, '', $response->getHeaders());
+            return;
+        }
+
+        if ($this->chunkSize === 0) {
+            $body = $response->getBody();
+            if ($body->isSeekable()) {
+                $body->rewind();
+            }
+            // __toString() must not throw under PSR-7 and can hide I/O failures.
+            $http->respond($status, $body->getContents(), $response->getHeaders());
             return;
         }
 

@@ -148,7 +148,7 @@ return [
 ```
 
 - `roadrunner.http.chunk_size` controls RoadRunner's streamed PSR-7 response
-  mode. The default `0` lets the official worker materialize the body.
+  mode. The default `0` materializes the body before sending it through the official HTTP transport.
   Positive values stream through RoadRunner's public HTTP transport. Non-seekable
   response bodies are buffered before sending; a stalled read fails instead of
   returning a truncated success. Large or unbounded non-seekable streams are

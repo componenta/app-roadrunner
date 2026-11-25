@@ -28,12 +28,19 @@ final class ResetFailedException extends RuntimeException
             throw new InvalidArgumentException('Reset failures must be a non-empty list.');
         }
 
-        foreach ($failures as $failure) {
+        $first = $failures[0];
+        if (!$first instanceof Throwable) {
+            throw new InvalidArgumentException('Every reset failure must be a Throwable.');
+        }
+
+        $validated = [$first];
+        foreach (array_slice($failures, 1) as $failure) {
             if (!$failure instanceof Throwable) {
                 throw new InvalidArgumentException('Every reset failure must be a Throwable.');
             }
+            $validated[] = $failure;
         }
 
-        return new self($failures);
+        return new self($validated);
     }
 }

@@ -305,3 +305,29 @@ it('sends informational responses without a generator even when chunking is enab
     expect($binary->responses)->toHaveCount(1)
         ->and($binary->responses[0]->body)->toBe('');
 });
+
+it('does not conceal a buffered response read failure behind stream string conversion', function (): void {
+    $factory = new Psr17Factory();
+    $binary = new FakeBinaryWorker();
+    $worker = new Psr7WorkerAdapter(new PSR7Worker($binary, $factory, $factory, $factory), 0);
+    $source = $this->createStub(\Psr\Http\Message\StreamInterface::class);
+    $source->method('isSeekable')->willReturn(true);
+    $source->method('getContents')->willThrowException(new RuntimeException('buffered read failed'));
+
+    expect(fn () => $worker->respond(new Response(200, [], $source)))
+        ->toThrow(RuntimeException::class, 'buffered read failed');
+    expect($binary->responses)->toBe([]);
+});
+
+it('transmits the complete seekable body in buffered mode even when the cursor is advanced', function (): void {
+    $factory = new Psr17Factory();
+    $binary = new FakeBinaryWorker();
+    $worker = new Psr7WorkerAdapter(new PSR7Worker($binary, $factory, $factory, $factory), 0);
+    $body = Stream::create('abcdef');
+    $body->read(2);
+
+    $worker->respond(new Response(200, [], $body));
+
+    expect($binary->responses)->toHaveCount(1)
+        ->and($binary->responses[0]->body)->toBe('abcdef');
+});
