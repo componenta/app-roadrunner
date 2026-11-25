@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Componenta\App\RoadRunner\Tests\Fixture\CallableMiddleware;
+use Componenta\App\RoadRunner\Tests\Fixture\FailingReadStream;
 use Nyholm\Psr7\Response;
 use Nyholm\Psr7\Stream;
 use Psr\Http\Message\ServerRequestInterface;
@@ -61,6 +62,8 @@ $app->pipe(new CallableMiddleware(static function (ServerRequestInterface $reque
 
     return match ($path) {
         '/full' => new Response(200, $headers, 'abcdef'),
+        '/broken-known' => new Response(200, $headers, new FailingReadStream(16384)),
+        '/broken-unknown' => new Response(200, $headers, new FailingReadStream(null)),
         '/partial' => new Response(206, $headers + ['Content-Range' => 'bytes 10-12/20'], 'abc'),
         '/no-content' => new Response(204, $headers, 'ignored'),
         '/not-modified' => new Response(304, $headers + ['ETag' => '"v1"', 'Content-Length' => '6'], 'ignored'),

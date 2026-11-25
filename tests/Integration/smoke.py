@@ -164,6 +164,47 @@ logs:
                       f"php_allocated_memory_min={min(memory)} max={max(memory)} "
                       f"worker_rss_min={min(rss)} max={max(rss)}", flush=True)
 
+                # A failed response read must cause a worker replacement.
+                # With known length the HTTP client must detect truncation;
+                # for unknown length record what the server actually exposes.
+                for path in ("/broken-known", "/broken-unknown"):
+                    broken = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+                    result = "no-response"
+                    try:
+                        broken.request("GET", path)
+                        response = broken.getresponse()
+                        try:
+                            content = response.read()
+                            result = f"status={response.status} complete_bytes={len(content)}"
+                            if path == "/broken-known" or chunk_size == 0:
+                                assert response.status >= 500, result
+                            else:
+                                # A final success may be indistinguishable from
+                                # truncation when the server owns HTTP framing.
+                                assert response.status >= 500 or len(content) == 8192, result
+                        except http.client.IncompleteRead as error:
+                            result = f"status={response.status} incomplete_bytes={len(error.partial)}"
+                            assert chunk_size > 0, result
+                    except (OSError, http.client.RemoteDisconnected) as error:
+                        result = type(error).__name__
+                    finally:
+                        broken.close()
+
+                    print(f"chunk_size={chunk_size} stream_failure={path} {result}", flush=True)
+                    deadline = time.monotonic() + 15
+                    while time.monotonic() < deadline:
+                        try:
+                            status, headers, body = request("/full")
+                            if status == 200:
+                                assert body == b"abcdef" and headers["x-worker-pid"] != pid
+                                pid = headers["x-worker-pid"]
+                                break
+                        except (OSError, http.client.HTTPException):
+                            conn.close()
+                        time.sleep(.1)
+                    else:
+                        raise AssertionError("RoadRunner did not replace a worker after a stream failure")
+
                 check("/reset-failure", 200, b"discard")
                 deadline = time.monotonic() + 15
                 while time.monotonic() < deadline:
