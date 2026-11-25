@@ -162,3 +162,28 @@ it('preserves Content-Location and ETag on a bodyless 304 response', function ()
         ->and($prepared->getHeaderLine('ETag'))->toBe('"one"')
         ->and((string) $prepared->getBody())->toBe('');
 });
+
+it('rejects a non-seekable stream that makes no progress before EOF', function (): void {
+    $source = $this->createStub(\Psr\Http\Message\StreamInterface::class);
+    $source->method('eof')->willReturn(false);
+    $source->method('read')->willReturn('');
+
+    expect(fn () => (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('GET', '/'),
+        new Response(200, [], new NonSeekableStream($source)),
+    ))->toThrow(RuntimeException::class, 'RoadRunner response stream made no progress before EOF.');
+});
+
+it('accepts an empty read when the stream has reached EOF', function (): void {
+    $source = $this->createStub(\Psr\Http\Message\StreamInterface::class);
+    $source->method('eof')->willReturn(false, true);
+    $source->method('read')->willReturn('');
+
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('GET', '/'),
+        new Response(200, [], new NonSeekableStream($source)),
+    );
+
+    expect((string) $prepared->getBody())->toBe('')
+        ->and($prepared->getHeaderLine('Content-Length'))->toBe('0');
+});

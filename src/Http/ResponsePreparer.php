@@ -116,6 +116,10 @@ final readonly class ResponsePreparer
             $chunk = $source->read(self::COPY_CHUNK_SIZE);
 
             if ($chunk === '') {
+                if (!$source->eof()) {
+                    throw new RuntimeException('RoadRunner response stream made no progress before EOF.');
+                }
+
                 break;
             }
 
