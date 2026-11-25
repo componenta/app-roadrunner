@@ -412,14 +412,17 @@ it('preserves a correct declared length when the original seekable body size is 
     $source->method('rewind')->willReturnCallback(static fn () => $body->rewind());
     $source->method('eof')->willReturnCallback(static fn (): bool => $body->eof());
     $source->method('read')->willReturnCallback(static fn (int $length): string => $body->read($length));
+    $source->method('getContents')->willReturnCallback(static fn (): string => $body->getContents());
 
     $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
         new ServerRequest('GET', '/'),
         new Response(200, ['Content-Length' => '6'], $source),
     );
 
+    $prepared->getBody()->rewind();
+
     expect($prepared->getHeaderLine('Content-Length'))->toBe('6')
-        ->and((string) $prepared->getBody())->toBe('abcdef');
+        ->and($prepared->getBody()->getContents())->toBe('abcdef');
 });
 
 it('does not read an unknown-size seekable body without a declared length', function (): void {

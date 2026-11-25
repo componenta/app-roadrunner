@@ -151,7 +151,10 @@ return [
   mode. The default `0` materializes the body before sending it through the official HTTP transport.
   Positive values stream through RoadRunner's public HTTP transport. Non-seekable
   response bodies are buffered before sending; a stalled read fails instead of
-  returning a truncated success. Large or unbounded non-seekable streams are
+  returning a truncated success. Seekable streams with unknown size and an
+  explicit Content-Length are also buffered to verify the declared length.
+  Seekable streams with neither a known size nor a declared length are not
+  buffered. Large or unbounded non-seekable streams are
   therefore not suitable for low-memory streaming.
 - `roadrunner.worker.intercept_side_effects` protects the Goridge protocol from
   accidental PHP output to stdout.

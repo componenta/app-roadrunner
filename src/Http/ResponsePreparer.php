@@ -70,7 +70,7 @@ final readonly class ResponsePreparer
             // Metadata describes the selected representation, not a 304 body.
             // Preserve values supplied by the application; never infer them.
             if ($response->hasHeader('Content-Length')) {
-                $response = $this->validateContentLength($response, null);
+                $response = $this->normalizeContentLength($response);
             }
 
             return $response
@@ -98,7 +98,7 @@ final readonly class ResponsePreparer
         if ($response->hasHeader('Content-Length')) {
             // It describes the corresponding GET representation, which is not
             // necessarily present in the HEAD response body.
-            $response = $this->validateContentLength($response, null);
+            $response = $this->normalizeContentLength($response);
         } elseif (!$response->hasHeader('Transfer-Encoding')) {
             $body = $response->getBody();
 
@@ -119,15 +119,32 @@ final readonly class ResponsePreparer
             throw new InvalidArgumentException('RoadRunner response body must be readable.');
         }
 
-        if (!$body->isSeekable()) {
-            $body = $this->copyToSeekableStream($body);
+        $hasLength = $response->hasHeader('Content-Length');
+        if ($hasLength) {
+            $response = $this->normalizeContentLength($response);
+        }
+
+        $seekable = $body->isSeekable();
+        $size = $seekable ? $body->getSize() : null;
+
+        // A declared length must describe the actual transmitted bytes.
+        // Only materialize an unknown-size seekable stream if it declares
+        // a length; otherwise preserve streaming without a known length.
+        if (!$seekable || ($size === null && $hasLength)) {
+            if ($seekable) {
+                $body->rewind();
+            }
+
+            [$body, $size] = $this->copyToSeekableStream($body);
             $response = $response->withBody($body);
         }
 
-        $size = $body->getSize();
+        if ($hasLength) {
+            if ($response->getHeaderLine('Content-Length') !== (string) $size) {
+                throw new InvalidArgumentException('RoadRunner response Content-Length does not match the body size.');
+            }
 
-        if ($response->hasHeader('Content-Length')) {
-            return $this->validateContentLength($response, $size);
+            return $response;
         }
 
         if ($size !== null && !$response->hasHeader('Transfer-Encoding')) {
@@ -137,7 +154,7 @@ final readonly class ResponsePreparer
         return $response;
     }
 
-    private function validateContentLength(ResponseInterface $response, ?int $size): ResponseInterface
+    private function normalizeContentLength(ResponseInterface $response): ResponseInterface
     {
         $length = null;
         foreach (explode(',', $response->getHeaderLine('Content-Length')) as $value) {
@@ -156,16 +173,14 @@ final readonly class ResponsePreparer
             $length = $canonical;
         }
 
-        if ($size !== null && $length !== (string) $size) {
-            throw new InvalidArgumentException('RoadRunner response Content-Length does not match the body size.');
-        }
-
         return $response->withHeader('Content-Length', $length);
     }
 
-    private function copyToSeekableStream(StreamInterface $source): StreamInterface
+    /** @return array{StreamInterface, int} */
+    private function copyToSeekableStream(StreamInterface $source): array
     {
         $target = $this->streamFactory->createStream();
+        $size = 0;
 
         while (!$source->eof()) {
             $chunk = $source->read(self::COPY_CHUNK_SIZE);
@@ -179,11 +194,12 @@ final readonly class ResponsePreparer
             }
 
             $this->writeAll($target, $chunk);
+            $size += strlen($chunk);
         }
 
         $target->rewind();
 
-        return $target;
+        return [$target, $size];
     }
 
     /**
