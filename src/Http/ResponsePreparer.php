@@ -35,7 +35,7 @@ final readonly class ResponsePreparer
 
         return $this->prepareByStatus(
             $response,
-            strtoupper($request->getMethod()) === 'HEAD',
+            $request->getMethod() === 'HEAD',
         );
     }
 
