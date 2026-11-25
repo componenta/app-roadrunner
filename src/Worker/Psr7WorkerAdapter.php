@@ -52,12 +52,7 @@ final readonly class Psr7WorkerAdapter implements PSR7WorkerInterface
         }
 
         if ($this->chunkSize === 0) {
-            $body = $response->getBody();
-            if ($body->isSeekable()) {
-                $body->rewind();
-            }
-            // __toString() must not throw under PSR-7 and can hide I/O failures.
-            $http->respond($status, $body->getContents(), $response->getHeaders());
+            $http->respond($status, $this->readBody($response->getBody()), $response->getHeaders());
             return;
         }
 
@@ -75,6 +70,33 @@ final readonly class Psr7WorkerAdapter implements PSR7WorkerInterface
         }
     }
 
+    private function readBody(StreamInterface $body): string
+    {
+        $size = null;
+        if ($body->isSeekable()) {
+            $body->rewind();
+            $size = $body->getSize();
+        }
+
+        // __toString() must not throw under PSR-7 and can hide I/O failures.
+        $contents = $body->getContents();
+
+        if ($size !== null) {
+            $this->verifySize($size, strlen($contents));
+        } elseif (!$body->eof()) {
+            throw new RuntimeException('RoadRunner response stream ended before EOF.');
+        }
+
+        return $contents;
+    }
+
+    private function verifySize(int $expected, int $actual): void
+    {
+        if ($expected !== $actual) {
+            throw new RuntimeException('RoadRunner response stream size changed during transmission.');
+        }
+    }
+
     /**
      * Stream reads can change EOF without changing the stream object.
      * @phpstan-impure
@@ -89,6 +111,8 @@ final readonly class Psr7WorkerAdapter implements PSR7WorkerInterface
     {
         try {
             $body->rewind();
+            $size = $body->getSize();
+            $readBytes = 0;
             while (!$body->eof()) {
                 $chunk = $body->read($this->chunkSize);
 
@@ -100,7 +124,16 @@ final readonly class Psr7WorkerAdapter implements PSR7WorkerInterface
                     break;
                 }
 
+                $readBytes += strlen($chunk);
+                if ($size !== null && $readBytes > $size) {
+                    throw new RuntimeException('RoadRunner response stream size changed during transmission.');
+                }
+
                 if ($this->isAtEnd($body)) {
+                    if ($size !== null) {
+                        $this->verifySize($size, $readBytes);
+                    }
+
                     return $chunk;
                 }
 
@@ -111,6 +144,10 @@ final readonly class Psr7WorkerAdapter implements PSR7WorkerInterface
                     // and acknowledges the stop after the generator returns.
                     return '';
                 }
+            }
+
+            if ($size !== null) {
+                $this->verifySize($size, $readBytes);
             }
 
             return '';
