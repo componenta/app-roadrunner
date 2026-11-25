@@ -385,3 +385,54 @@ it('normalizes equivalent representation lengths without reading a suppressed bo
     ['HEAD', 200],
     ['GET', 304],
 ]);
+
+it('rejects a declared length that differs from an initially unknown seekable body size', function (string $length): void {
+    $body = Stream::create('abcdef');
+    $source = $this->createStub(\Psr\Http\Message\StreamInterface::class);
+    $source->method('isSeekable')->willReturn(true);
+    $source->method('isReadable')->willReturn(true);
+    $source->method('getSize')->willReturn(null);
+    $source->method('rewind')->willReturnCallback(static fn () => $body->rewind());
+    $source->method('eof')->willReturnCallback(static fn (): bool => $body->eof());
+    $source->method('read')->willReturnCallback(static fn (int $length): string => $body->read($length));
+
+    expect(fn () => (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('GET', '/'),
+        new Response(200, ['Content-Length' => $length], $source),
+    ))->toThrow(InvalidArgumentException::class, 'RoadRunner response Content-Length does not match the body size.');
+})->with(['5', '7']);
+
+it('preserves a correct declared length when the original seekable body size is unknown', function (): void {
+    $body = Stream::create('abcdef');
+    $body->read(2);
+    $source = $this->createStub(\Psr\Http\Message\StreamInterface::class);
+    $source->method('isSeekable')->willReturn(true);
+    $source->method('isReadable')->willReturn(true);
+    $source->method('getSize')->willReturn(null);
+    $source->method('rewind')->willReturnCallback(static fn () => $body->rewind());
+    $source->method('eof')->willReturnCallback(static fn (): bool => $body->eof());
+    $source->method('read')->willReturnCallback(static fn (int $length): string => $body->read($length));
+
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('GET', '/'),
+        new Response(200, ['Content-Length' => '6'], $source),
+    );
+
+    expect($prepared->getHeaderLine('Content-Length'))->toBe('6')
+        ->and((string) $prepared->getBody())->toBe('abcdef');
+});
+
+it('does not read an unknown-size seekable body without a declared length', function (): void {
+    $source = $this->createStub(\Psr\Http\Message\StreamInterface::class);
+    $source->method('isSeekable')->willReturn(true);
+    $source->method('isReadable')->willReturn(true);
+    $source->method('getSize')->willReturn(null);
+    $source->method('read')->willThrowException(new RuntimeException('must not read'));
+
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('GET', '/'),
+        new Response(200, [], $source),
+    );
+
+    expect($prepared->hasHeader('Content-Length'))->toBeFalse();
+});
