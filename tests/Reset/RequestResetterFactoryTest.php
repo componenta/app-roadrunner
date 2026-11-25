@@ -45,3 +45,41 @@ it('rejects a configured service with the wrong contract', function (): void {
     expect(fn () => (new RequestResetterFactory())($container))
         ->toThrow(Componenta\Config\Exception\InvalidContainerValueException::class);
 });
+
+it('resolves a repeated non-shared resetter service id only once', function (): void {
+    $services = new class implements \Psr\Container\ContainerInterface {
+        /** @var list<CountingResetter> */
+        public array $created = [];
+
+        public function get(string $id): mixed
+        {
+            $resetter = new CountingResetter();
+            $this->created[] = $resetter;
+
+            return $resetter;
+        }
+
+        public function has(string $id): bool { return $id === 'resetter'; }
+    };
+    $container = new ContainerValue(
+        $services,
+        new Config(['roadrunner' => ['resetters' => ['resetter', 'resetter']]], new \Componenta\Config\Environment([])),
+    );
+
+    (new RequestResetterFactory())($container)->reset();
+
+    expect($services->created)->toHaveCount(1)
+        ->and($services->created[0]->resetCalls)->toBe(1);
+});
+
+it('does not invoke the same resetter object twice through aliases', function (): void {
+    $resetter = new CountingResetter();
+    $container = new ContainerValue(
+        new ServiceContainer(['first' => $resetter, 'alias' => $resetter]),
+        new Config(['roadrunner' => ['resetters' => ['first', 'alias']]], new \Componenta\Config\Environment([])),
+    );
+
+    (new RequestResetterFactory())($container)->reset();
+
+    expect($resetter->resetCalls)->toBe(1);
+});

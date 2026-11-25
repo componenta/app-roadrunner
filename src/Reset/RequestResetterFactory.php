@@ -15,6 +15,7 @@ final readonly class RequestResetterFactory
     {
         $serviceIds = $container->config->array(new ConfigPath(ConfigKey::RESETTERS), []);
         $resetters = [];
+        $resolvedIds = [];
 
         foreach ($serviceIds as $index => $serviceId) {
             if (!is_string($serviceId) || trim($serviceId) === '') {
@@ -32,7 +33,12 @@ final readonly class RequestResetterFactory
                 ));
             }
 
+            if (isset($resolvedIds[$serviceId])) {
+                continue;
+            }
+
             $resetters[] = $container->get($serviceId, RequestResetterInterface::class);
+            $resolvedIds[$serviceId] = true;
         }
 
         return new CompositeRequestResetter($this->deduplicate($resetters));
