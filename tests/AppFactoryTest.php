@@ -201,3 +201,52 @@ it('preserves the standard SAPI HTTP app outside RoadRunner', function (): void 
         }
     }
 });
+
+it('exposes only the boot target contract to HTTP bootloaders for either runtime and provider order', function (string $mode, bool $roadrunnerFirst): void {
+    $hadMode = array_key_exists('RR_MODE', $_SERVER);
+    $previous = $_SERVER['RR_MODE'] ?? null;
+    $_SERVER['RR_MODE'] = $mode;
+
+    try {
+        $providers = $roadrunnerFirst
+            ? [new ConfigProvider(), new AppConfigProvider(), new HttpConfigProvider()]
+            : [new AppConfigProvider(), new HttpConfigProvider(), new ConfigProvider()];
+        $services = roadRunnerAppFactoryServices();
+        $providers[] = static fn (): array => ['dependencies' => ['factories' => array_map(
+            static fn (object $entry): Closure => static fn (): object => $entry,
+            $services,
+        )]];
+        $composition = (new \Componenta\Config\ConfigFactory())->create(
+            new \Componenta\Config\Environment([]),
+            ...$providers,
+        );
+        $container = (new \Componenta\DI\ContainerFactory())->create($composition->config, $composition->dependencies);
+        $app = $container->get(AppFactoryInterface::class)->createApp(Scope::HTTP, $container);
+        $target = $container->get(\Componenta\App\Boot\BootTargetFactoryInterface::class)
+            ->create($app, Scope::HTTP);
+
+        expect($target)->toBeInstanceOf(HttpBootTargetInterface::class)
+            ->not->toBeInstanceOf(\Componenta\App\AppInterface::class)
+            ->and(is_callable([$target, 'run']))->toBeFalse()
+            ->and($target)->not->toBe($app);
+
+        $middleware = new \Componenta\App\RoadRunner\Tests\Fixture\CallableMiddleware(
+            static fn ($request, $handler) => $handler->handle($request),
+        );
+        $target->pipe($middleware, 100);
+        $app->run();
+
+        expect($services[PipelineFactoryInterface::class]->middlewares)->toBe([$middleware]);
+    } finally {
+        if ($hadMode) {
+            $_SERVER['RR_MODE'] = $previous;
+        } else {
+            unset($_SERVER['RR_MODE']);
+        }
+    }
+})->with([
+    'RoadRunner normal provider order' => ['http', false],
+    'RoadRunner reversed provider order' => ['http', true],
+    'SAPI normal provider order' => ['sapi', false],
+    'SAPI reversed provider order' => ['sapi', true],
+]);
