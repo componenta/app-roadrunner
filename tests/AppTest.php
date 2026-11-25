@@ -86,7 +86,7 @@ it('returns a generic 500 and still resets request state', function (): void {
 });
 
 it('returns 400 after malformed input and resets state', function (): void {
-    $worker = new FakePsr7Worker([new RuntimeException('bad payload'), null]);
+    $worker = new FakePsr7Worker([new JsonException('bad payload'), null]);
     $resetter = new CountingResetter();
     $app = makeRoadRunnerApp(
         $worker,
@@ -181,4 +181,41 @@ it('closes output buffers opened by a request', function (): void {
             ob_end_clean();
         }
     }
+});
+
+it('does not respond or reuse the worker after an unexpected receive failure', function (): void {
+    $worker = new FakePsr7Worker([
+        new RuntimeException('relay read failed'),
+        new ServerRequest('GET', '/must-not-run'),
+        null,
+    ]);
+    $resetter = new CountingResetter();
+    $app = makeRoadRunnerApp(
+        $worker,
+        new FakePipelineFactory(static fn (): never => throw new LogicException('unexpected request')),
+        $resetter,
+    );
+
+    expect($app->run())->toBe(1)
+        ->and($worker->responses)->toBe([])
+        ->and($resetter->resetCalls)->toBe(1);
+});
+
+it('continues after invalid request data when the response and cleanup succeed', function (): void {
+    $worker = new FakePsr7Worker([
+        new InvalidArgumentException('invalid request'),
+        new ServerRequest('GET', '/next'),
+        null,
+    ]);
+    $resetter = new CountingResetter();
+    $app = makeRoadRunnerApp(
+        $worker,
+        new FakePipelineFactory(static fn (): Response => new Response(200, [], 'ok')),
+        $resetter,
+    );
+
+    expect($app->run())->toBeNull()
+        ->and(array_map(static fn ($response): int => $response->getStatusCode(), $worker->responses))
+        ->toBe([400, 200])
+        ->and($resetter->resetCalls)->toBe(2);
 });

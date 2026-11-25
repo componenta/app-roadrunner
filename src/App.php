@@ -21,6 +21,8 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Spiral\RoadRunner\Http\GlobalState;
 use Spiral\RoadRunner\Http\PSR7WorkerInterface;
+use InvalidArgumentException;
+use JsonException;
 use RuntimeException;
 use Throwable;
 
@@ -53,7 +55,8 @@ final class App implements AppInterface, HttpBootTargetInterface
         while (true) {
             try {
                 $request = $this->worker->waitRequest();
-            } catch (Throwable $exception) {
+            } catch (JsonException | InvalidArgumentException $exception) {
+                // Request decoding or PSR-7 validation failed after receipt.
                 $this->report($exception);
                 unset($exception);
 
@@ -65,6 +68,14 @@ final class App implements AppInterface, HttpBootTargetInterface
                 }
 
                 continue;
+            } catch (Throwable $exception) {
+                // A failed receive may mean that there is no pending request
+                // or the relay is no longer synchronized. Do not write a frame.
+                $this->report($exception);
+                unset($exception);
+                $this->resetSafely($outputBufferLevel);
+
+                return 1;
             }
 
             if ($request === null) {
