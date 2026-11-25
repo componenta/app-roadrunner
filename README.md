@@ -14,8 +14,7 @@ A Russian guide is available in [README.ru.md](README.ru.md).
 ## Installation
 
 ```bash
-composer config repositories.componenta-app-roadrunner vcs https://github.com/componenta/app-roadrunner.git
-composer require componenta/app-roadrunner:dev-dev
+composer require componenta/app-roadrunner:^3.0
 composer require --dev spiral/roadrunner-cli:^2.7
 vendor/bin/rr get-binary
 ```
@@ -82,8 +81,9 @@ The RoadRunner app:
 Middleware priority and equal-priority registration order match
 `componenta/app-http`.
 
-An unhandled pipeline exception becomes an empty generic `500` response. Invalid
-RoadRunner request data becomes an empty generic `400`. A transport or cleanup
+An unhandled pipeline exception becomes an empty generic `500` response. Recognized invalid
+request data becomes an empty generic `400`. Unexpected receive failures are
+not answered because the relay may be out of sync. A transport or cleanup
 failure exits the worker with code `1`, allowing RoadRunner to replace a process
 whose state is no longer trusted.
 
@@ -148,9 +148,11 @@ return [
 ```
 
 - `roadrunner.http.chunk_size` controls RoadRunner's streamed PSR-7 response
-  mode. The default `0` lets the official worker materialize the body and also
-  supports non-seekable PSR-7 streams. A positive value requires rewindable
-  response bodies.
+  mode. The default `0` lets the official worker materialize the body.
+  Positive values stream through RoadRunner's public HTTP transport. Non-seekable
+  response bodies are buffered before sending; a stalled read fails instead of
+  returning a truncated success. Large or unbounded non-seekable streams are
+  therefore not suitable for low-memory streaming.
 - `roadrunner.worker.intercept_side_effects` protects the Goridge protocol from
   accidental PHP output to stdout.
 - `roadrunner.resetters` is an ordered list of container service ids implementing
@@ -186,6 +188,18 @@ http:
 - `RequestResetterInterface` is the application cleanup extension point.
 - `ResetFailedException` exposes all cleanup failures through its `failures`
   property.
+
+HEAD responses do not consume non-seekable bodies to compute optional metadata.
+Range support is advertised only if the application sets `Accept-Ranges`.
+A 304 response preserves explicitly provided representation metadata, including
+`Content-Length` when valid under RFC 9110. Conflicting transfer encoding and
+content length are normalized by removing content length.
+
+The bundled entry point uses a non-removable output guard and honors PHP's
+error reporting mask. Direct writes to STDOUT are still forbidden. The runtime
+checks the structure of persistent output buffers; it cannot identify every
+replacement by an identical PHP handler. Application code must not modify
+persistent runtime buffers or retain per-request state in other PHP globals.
 
 The worker loop and factory are container-managed infrastructure; application
 code normally interacts only with `RequestResetterInterface`.

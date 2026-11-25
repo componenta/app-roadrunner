@@ -1,4 +1,11 @@
-# Verification
+# Historical verification
+
+The following results concern the 2026-08-03 development baseline, not the
+3.0.0 release or subsequent audit fixes. They must not be treated as current
+release acceptance evidence. The 3.0.0 release workflow passed at
+https://github.com/componenta/app-roadrunner/actions/runs/35468780385.
+New runtime and regression checks require a fresh dependency installation and
+execution on PHP 8.4/8.5, plus real RoadRunner process tests.
 
 Verification date: 2026-08-03
 
