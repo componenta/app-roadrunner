@@ -18,7 +18,7 @@ use Nyholm\Psr7\ServerRequest;
 function makeRoadRunnerApp(
     FakePsr7Worker $worker,
     FakePipelineFactory $pipelineFactory,
-    CountingResetter $resetter,
+    \Componenta\App\RoadRunner\Reset\RequestResetterInterface $resetter,
 ): App {
     $psr17 = new Psr17Factory();
 
@@ -241,5 +241,33 @@ it('discards a worker whose persistent output buffer has been replaced', functio
         while (ob_get_level() > $baseline) {
             ob_end_clean();
         }
+    }
+});
+
+it('reports each cleanup failure before discarding the worker', function (): void {
+    $path = tempnam(sys_get_temp_dir(), 'rr-log-');
+    $previous = ini_get('error_log');
+    ini_set('error_log', $path);
+
+    try {
+        $resetter = new \Componenta\App\RoadRunner\Reset\CompositeRequestResetter([
+            new class implements \Componenta\App\RoadRunner\Reset\RequestResetterInterface {
+                public function reset(): void { throw new RuntimeException('first-cleanup-failure'); }
+            },
+            new class implements \Componenta\App\RoadRunner\Reset\RequestResetterInterface {
+                public function reset(): void { throw new RuntimeException('second-cleanup-failure'); }
+            },
+        ]);
+        $app = makeRoadRunnerApp(
+            new FakePsr7Worker([new ServerRequest('GET', '/'), null]),
+            new FakePipelineFactory(static fn (): Response => new Response()),
+            $resetter,
+        );
+
+        expect($app->run())->toBe(1)
+            ->and(file_get_contents($path))->toContain('first-cleanup-failure', 'second-cleanup-failure');
+    } finally {
+        ini_set('error_log', (string) $previous);
+        unlink($path);
     }
 });

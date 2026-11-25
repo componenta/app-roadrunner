@@ -9,6 +9,7 @@ use Componenta\App\Boot\Target\HttpBootTargetInterface;
 use Componenta\App\Exception\MiddlewarePipeException;
 use Componenta\App\RoadRunner\Http\ResponsePreparer;
 use Componenta\App\RoadRunner\Reset\RequestResetterInterface;
+use Componenta\App\RoadRunner\Reset\ResetFailedException;
 use Componenta\Config\ContainerValue;
 use Componenta\Http\Middleware\Exception\MiddlewareResolutionExceptionInterface;
 use Componenta\Http\Middleware\MiddlewareFactory;
@@ -252,6 +253,14 @@ final class App implements AppInterface, HttpBootTargetInterface
     private function report(Throwable $exception): void
     {
         try {
+            if ($exception instanceof ResetFailedException) {
+                error_log('[componenta/app-roadrunner] ' . $exception->getMessage());
+                foreach ($exception->failures as $failure) {
+                    $this->report($failure);
+                }
+                return;
+            }
+
             error_log('[componenta/app-roadrunner] ' . $exception);
         } catch (Throwable) {
             // Reporting must not replace the original failure or skip cleanup.
