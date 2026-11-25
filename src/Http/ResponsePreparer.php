@@ -29,6 +29,10 @@ final readonly class ResponsePreparer
         ServerRequestInterface $request,
         ResponseInterface $response,
     ): ResponseInterface {
+        if ($response->hasHeader('Transfer-Encoding') && $response->hasHeader('Content-Length')) {
+            $response = $response->withoutHeader('Content-Length');
+        }
+
         return $this->prepareByStatus(
             $response,
             strtoupper($request->getMethod()) === 'HEAD',
@@ -62,11 +66,18 @@ final readonly class ResponsePreparer
 
     private function prepareBodyless(ResponseInterface $response): ResponseInterface
     {
-        if ($response->getStatusCode() !== 304) {
-            $response = $response->withoutHeader('Content-Location');
+        if ($response->getStatusCode() === 304) {
+            // Metadata describes the selected representation, not a 304 body.
+            // Preserve values supplied by the application; never infer them.
+            return $response
+                ->withoutHeader('X-Sendfile')
+                ->withoutHeader('X-Accel-Redirect')
+                ->withBody($this->streamFactory->createStream());
         }
 
         return $response
+            ->withoutHeader('Content-Location')
+            ->withoutHeader('Transfer-Encoding')
             ->withoutHeader('Content-Type')
             ->withoutHeader('Content-Length')
             ->withoutHeader('Content-Encoding')

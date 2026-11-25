@@ -233,3 +233,45 @@ it('preserves explicit application range support', function (string $value): voi
 
     expect($prepared->getHeaderLine('Accept-Ranges'))->toBe($value);
 })->with(['bytes', 'none']);
+
+it('preserves explicit representation metadata on 304 without generating a body', function (): void {
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('GET', '/'),
+        new Response(304, [
+            'Content-Length' => '123',
+            'Content-Type' => 'application/json',
+            'Content-Encoding' => 'gzip',
+            'ETag' => '"v1"',
+        ], 'ignored'),
+    );
+
+    expect((string) $prepared->getBody())->toBe('')
+        ->and($prepared->getHeaderLine('Content-Length'))->toBe('123')
+        ->and($prepared->getHeaderLine('Content-Type'))->toBe('application/json')
+        ->and($prepared->getHeaderLine('Content-Encoding'))->toBe('gzip')
+        ->and($prepared->getHeaderLine('ETag'))->toBe('"v1"');
+});
+
+it('removes transfer encoding from responses that cannot carry a message body', function (int $status): void {
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('GET', '/'),
+        new Response($status, ['Transfer-Encoding' => 'chunked', 'Content-Length' => '6'], 'abcdef'),
+    );
+
+    expect((string) $prepared->getBody())->toBe('')
+        ->and($prepared->hasHeader('Transfer-Encoding'))->toBeFalse()
+        ->and($prepared->hasHeader('Content-Length'))->toBeFalse();
+})->with([100, 103, 204, 205]);
+
+it('never sends content length together with transfer encoding', function (string $method, int $status): void {
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest($method, '/'),
+        new Response($status, ['Transfer-Encoding' => 'chunked', 'Content-Length' => '6'], 'abcdef'),
+    );
+
+    expect($prepared->hasHeader('Content-Length'))->toBeFalse();
+})->with([
+    ['GET', 200],
+    ['HEAD', 200],
+    ['GET', 304],
+]);
