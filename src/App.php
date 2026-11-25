@@ -100,8 +100,28 @@ final class App implements AppInterface, HttpBootTargetInterface
                 if ($response === null || !$this->prepareAndRespondSafely($request, $response)) {
                     $terminate = true;
                 }
+            } catch (Throwable $exception) {
+                // A response may already have been sent. Never attempt a
+                // second response after an unexpected lifecycle failure.
+                $this->report($exception);
+                unset($exception);
+                $terminate = true;
             } finally {
-                unset($request, $response);
+                try {
+                    unset($request);
+                } catch (Throwable $exception) {
+                    $this->report($exception);
+                    unset($exception);
+                    $terminate = true;
+                }
+
+                try {
+                    unset($response);
+                } catch (Throwable $exception) {
+                    $this->report($exception);
+                    unset($exception);
+                    $terminate = true;
+                }
 
                 if (!$this->resetSafely($outputBuffers, $serverBaseline)) {
                     $terminate = true;

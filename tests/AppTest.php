@@ -303,3 +303,27 @@ it('restores the boot-time server state between requests and on worker exit', fu
         \Spiral\RoadRunner\Http\GlobalState::cacheServerVars();
     }
 });
+
+it('cleans up and discards the worker when releasing a request throws', function (): void {
+    $worker = new FakePsr7Worker([
+        (new ServerRequest('GET', '/first'))->withAttribute('destructor', new class {
+            public function __destruct()
+            {
+                throw new RuntimeException('request destructor failed');
+            }
+        }),
+        new ServerRequest('GET', '/must-not-run'),
+        null,
+    ]);
+    $resetter = new CountingResetter();
+    $app = makeRoadRunnerApp(
+        $worker,
+        new FakePipelineFactory(static fn (): Response => new Response(200, [], 'ok')),
+        $resetter,
+    );
+
+    expect($app->run())->toBe(1)
+        ->and($worker->responses)->toHaveCount(1)
+        ->and((string) $worker->responses[0]->getBody())->toBe('ok')
+        ->and($resetter->resetCalls)->toBe(1);
+});
