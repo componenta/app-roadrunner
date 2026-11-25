@@ -29,16 +29,13 @@ final readonly class ResponsePreparer
         ServerRequestInterface $request,
         ResponseInterface $response,
     ): ResponseInterface {
-        $response = $this->prepareByStatus($response);
-
-        // The Go server suppresses a HEAD body at the socket layer, but
-        // removing it here avoids transferring the bytes through Goridge.
-        return strtoupper($request->getMethod()) === 'HEAD'
-            ? $response->withBody($this->streamFactory->createStream())
-            : $response;
+        return $this->prepareByStatus(
+            $response,
+            strtoupper($request->getMethod()) === 'HEAD',
+        );
     }
 
-    private function prepareByStatus(ResponseInterface $response): ResponseInterface
+    private function prepareByStatus(ResponseInterface $response, bool $head): ResponseInterface
     {
         $status = $response->getStatusCode();
 
@@ -54,6 +51,10 @@ final readonly class ResponsePreparer
                 ->withoutHeader('Content-Length')
                 ->withoutHeader('Accept-Ranges')
                 ->withBody($this->streamFactory->createStream());
+        }
+
+        if ($head) {
+            return $this->prepareHead($response);
         }
 
         return $this->prepareFull($response);
@@ -75,6 +76,23 @@ final readonly class ResponsePreparer
             ->withoutHeader('X-Sendfile')
             ->withoutHeader('X-Accel-Redirect')
             ->withBody($this->streamFactory->createStream());
+    }
+
+    private function prepareHead(ResponseInterface $response): ResponseInterface
+    {
+        $body = $response->getBody();
+
+        // A non-seekable stream may be partially consumed or have unknown
+        // length. Do not read it solely to compute optional HEAD metadata.
+        if ($body->isSeekable()
+            && !$response->hasHeader('Content-Length')
+            && !$response->hasHeader('Transfer-Encoding')
+            && ($size = $body->getSize()) !== null
+        ) {
+            $response = $response->withHeader('Content-Length', (string) $size);
+        }
+
+        return $response->withBody($this->streamFactory->createStream());
     }
 
     private function prepareFull(ResponseInterface $response): ResponseInterface

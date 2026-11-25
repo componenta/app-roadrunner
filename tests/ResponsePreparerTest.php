@@ -187,3 +187,31 @@ it('accepts an empty read when the stream has reached EOF', function (): void {
     expect((string) $prepared->getBody())->toBe('')
         ->and($prepared->getHeaderLine('Content-Length'))->toBe('0');
 });
+
+it('does not consume a non-seekable response body for HEAD', function (): void {
+    $source = new NonSeekableStream(Stream::create('forward'));
+    $source->read(2);
+
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('HEAD', '/'),
+        new Response(200, [], $source),
+    );
+
+    expect((string) $prepared->getBody())->toBe('')
+        ->and($prepared->hasHeader('Content-Length'))->toBeFalse()
+        ->and($source->read(5))->toBe('rward');
+});
+
+it('preserves explicit HEAD representation metadata without inspecting the body', function (): void {
+    $source = new NonSeekableStream(Stream::create('forward'));
+
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('HEAD', '/'),
+        new Response(200, ['Content-Length' => '7', 'Content-Type' => 'text/plain'], $source),
+    );
+
+    expect((string) $prepared->getBody())->toBe('')
+        ->and($prepared->getHeaderLine('Content-Length'))->toBe('7')
+        ->and($prepared->getHeaderLine('Content-Type'))->toBe('text/plain')
+        ->and($source->read(7))->toBe('forward');
+});
