@@ -219,3 +219,27 @@ it('continues after invalid request data when the response and cleanup succeed',
         ->toBe([400, 200])
         ->and($resetter->resetCalls)->toBe(2);
 });
+
+it('discards a worker whose persistent output buffer has been replaced', function (): void {
+    $baseline = ob_get_level();
+    ob_start();
+    $worker = new FakePsr7Worker([new ServerRequest('GET', '/'), null]);
+    $app = makeRoadRunnerApp(
+        $worker,
+        new FakePipelineFactory(static function (): Response {
+            ob_end_clean();
+            ob_start(static fn (string $chunk): string => $chunk);
+
+            return new Response();
+        }),
+        new CountingResetter(),
+    );
+
+    try {
+        expect($app->run())->toBe(1);
+    } finally {
+        while (ob_get_level() > $baseline) {
+            ob_end_clean();
+        }
+    }
+});

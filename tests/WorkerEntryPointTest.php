@@ -58,3 +58,13 @@ it('converts enabled warnings to a worker failure', function (): void {
         ->and($stdout)->toBe('')
         ->and($stderr)->toContain('enabled-warning');
 });
+
+it('prevents requests from removing the permanent protocol output guard', function (): void {
+    [$code, $stdout, $stderr] = runRoadRunnerEntryPoint(
+        'if (@ob_end_clean()) { exit(2); } echo "guarded-output";',
+    );
+
+    expect($code)->toBe(0)
+        ->and($stdout)->toBe('')
+        ->and($stderr)->toContain('guarded-output');
+});

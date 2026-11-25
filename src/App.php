@@ -46,7 +46,7 @@ final class App implements AppInterface, HttpBootTargetInterface
     {
         $pipeline = $this->pipelineFactory->createMiddlewarePipeline($this->sortedMiddlewares());
 
-        $outputBufferLevel = ob_get_level();
+        $outputBuffers = $this->outputBufferSignature();
 
         // GlobalState is loaded while the container is assembled. Refresh its
         // baseline after all Componenta bootloaders have finished.
@@ -61,7 +61,7 @@ final class App implements AppInterface, HttpBootTargetInterface
                 unset($exception);
 
                 $responded = $this->respondWithStatus(400, 'Bad Request');
-                $reset = $this->resetSafely($outputBufferLevel);
+                $reset = $this->resetSafely($outputBuffers);
 
                 if (!$responded || !$reset) {
                     return 1;
@@ -73,7 +73,7 @@ final class App implements AppInterface, HttpBootTargetInterface
                 // or the relay is no longer synchronized. Do not write a frame.
                 $this->report($exception);
                 unset($exception);
-                $this->resetSafely($outputBufferLevel);
+                $this->resetSafely($outputBuffers);
 
                 return 1;
             }
@@ -100,7 +100,7 @@ final class App implements AppInterface, HttpBootTargetInterface
             } finally {
                 unset($request, $response);
 
-                if (!$this->resetSafely($outputBufferLevel)) {
+                if (!$this->resetSafely($outputBuffers)) {
                     $terminate = true;
                 }
             }
@@ -197,8 +197,10 @@ final class App implements AppInterface, HttpBootTargetInterface
         }
     }
 
-    private function resetSafely(int $outputBufferLevel): bool
+    /** @param list<array{name: string, type: int, flags: int, level: int, chunk_size: int}> $outputBuffers */
+    private function resetSafely(array $outputBuffers): bool
     {
+        $outputBufferLevel = count($outputBuffers);
         $clean = true;
 
         try {
@@ -215,8 +217,8 @@ final class App implements AppInterface, HttpBootTargetInterface
                 }
             }
 
-            if (ob_get_level() < $outputBufferLevel) {
-                throw new RuntimeException('A request closed a persistent worker output buffer.');
+            if ($this->outputBufferSignature() !== $outputBuffers) {
+                throw new RuntimeException('A request changed a persistent worker output buffer.');
             }
         } catch (Throwable $exception) {
             $this->report($exception);
@@ -224,6 +226,27 @@ final class App implements AppInterface, HttpBootTargetInterface
         }
 
         return $clean;
+    }
+
+    /**
+     * Buffer contents and runtime flags may legitimately change on writes.
+     * The signature detects structural changes, not replacement by an identical
+     * handler. The entry point independently protects the transport guard.
+     *
+     * @return list<array{name: string, type: int, flags: int, level: int, chunk_size: int}>
+     */
+    private function outputBufferSignature(): array
+    {
+        return array_map(
+            static fn (array $buffer): array => [
+                'name' => $buffer['name'],
+                'type' => $buffer['type'],
+                'flags' => $buffer['flags'] & PHP_OUTPUT_HANDLER_STDFLAGS,
+                'level' => $buffer['level'],
+                'chunk_size' => $buffer['chunk_size'],
+            ],
+            ob_get_status(true),
+        );
     }
 
     private function report(Throwable $exception): void
