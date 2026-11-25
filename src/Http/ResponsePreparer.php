@@ -155,12 +155,6 @@ final readonly class ResponsePreparer
             throw new InvalidArgumentException('RoadRunner response Content-Length does not match the body size.');
         }
 
-        // A comma-separated list is non-empty, including when the input is
-        // an empty string (which is rejected above).
-        if ($length === null) {
-            throw new InvalidArgumentException('Missing RoadRunner response Content-Length.');
-        }
-
         return $response->withHeader('Content-Length', $length);
     }
 
