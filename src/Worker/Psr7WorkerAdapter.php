@@ -104,13 +104,15 @@ final readonly class Psr7WorkerAdapter implements PSR7WorkerInterface
                     return $chunk;
                 }
 
-                yield $chunk;
+                try {
+                    yield $chunk;
+                } catch (StreamStoppedException) {
+                    // HttpWorker injects cancellation at the suspended yield
+                    // and acknowledges the stop after the generator returns.
+                    return '';
+                }
             }
 
-            return '';
-        } catch (StreamStoppedException) {
-            // The public HTTP worker acknowledges the client's stream stop
-            // once the generator has accepted this cancellation.
             return '';
         } catch (Throwable $exception) {
             $failure = $exception;
