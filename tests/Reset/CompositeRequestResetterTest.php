@@ -40,3 +40,22 @@ it('runs every resetter and reports all failures', function (): void {
             ->and($second->resetCalls)->toBe(1);
     }
 });
+
+it('rejects invalid aggregate failures', function (array $failures): void {
+    expect(fn () => ResetFailedException::fromFailures($failures))
+        ->toThrow(InvalidArgumentException::class);
+})->with([
+    'empty list' => [[]],
+    'non-list' => [['failure' => new RuntimeException('failed')]],
+    'invalid element' => [['failed']],
+]);
+
+it('preserves the original failure objects in declaration order', function (): void {
+    $first = new RuntimeException('first');
+    $second = new LogicException('second');
+
+    $exception = ResetFailedException::fromFailures([$first, $second]);
+
+    expect($exception->failures)->toBe([$first, $second])
+        ->and($exception->getPrevious())->toBe($first);
+});
