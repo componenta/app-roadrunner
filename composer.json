@@ -12,8 +12,8 @@
         "long-running"
     ],
     "require": {
-        "componenta/app": "^5.0.0",
-        "componenta/app-http": "^3.0.0",
+        "componenta/app": "^6.0.0",
+        "componenta/app-http": "^4.0.0",
         "componenta/config": "^3.0.0",
         "componenta/di": "^5.0.3",
         "componenta/middleware-factory": "^2.1.0",
@@ -67,7 +67,8 @@
             ]
         },
         "branch-alias": {
-            "dev-main": "3.0.x-dev"
+            "dev-main": "4.0.x-dev",
+            "dev-refactor/app-runtime-contracts": "4.0.x-dev"
         }
     },
     "suggest": {
