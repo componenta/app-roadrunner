@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Componenta\App\RoadRunner\Http\ResponsePreparer;
 use Componenta\App\RoadRunner\Tests\Fixture\FakeBinaryWorker;
 use Componenta\App\RoadRunner\Tests\Fixture\NonSeekableStream;
+use Componenta\App\RoadRunner\Worker\Psr7WorkerAdapter;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\Response;
 use Nyholm\Psr7\ServerRequest;
@@ -127,8 +128,7 @@ it('is compatible with the official RoadRunner chunked PSR-7 transport', functio
     $psr17 = new Psr17Factory();
     $preparer = new ResponsePreparer($psr17);
     $binaryWorker = new FakeBinaryWorker();
-    $worker = new PSR7Worker($binaryWorker, $psr17, $psr17, $psr17);
-    $worker->chunkSize = 2;
+    $worker = new Psr7WorkerAdapter(new PSR7Worker($binaryWorker, $psr17, $psr17, $psr17), 2);
 
     $worker->respond($preparer->prepare(
         new ServerRequest('GET', '/'),
@@ -275,3 +275,33 @@ it('never sends content length together with transfer encoding', function (strin
     ['HEAD', 200],
     ['GET', 304],
 ]);
+
+it('propagates a stream read failure after a chunk has been sent', function (): void {
+    $factory = new Psr17Factory();
+    $binary = new FakeBinaryWorker();
+    $worker = new Psr7WorkerAdapter(new PSR7Worker($binary, $factory, $factory, $factory), 2);
+    $source = $this->createStub(\Psr\Http\Message\StreamInterface::class);
+    $source->method('eof')->willReturn(false);
+    $reads = 0;
+    $source->method('read')->willReturnCallback(static function () use (&$reads): string {
+        if (++$reads === 1) {
+            return 'ab';
+        }
+        throw new RuntimeException('stream failed');
+    });
+
+    expect(fn () => $worker->respond(new Response(200, [], $source)))
+        ->toThrow(RuntimeException::class, 'stream failed');
+    expect($binary->responses[0]->body)->toBe('ab');
+});
+
+it('sends informational responses without a generator even when chunking is enabled', function (): void {
+    $factory = new Psr17Factory();
+    $binary = new FakeBinaryWorker();
+    $worker = new Psr7WorkerAdapter(new PSR7Worker($binary, $factory, $factory, $factory), 2);
+
+    $worker->respond(new Response(103));
+
+    expect($binary->responses)->toHaveCount(1)
+        ->and($binary->responses[0]->body)->toBe('');
+});

@@ -42,8 +42,6 @@ final readonly class Psr7WorkerFactory
             $container->get(StreamFactoryInterface::class, StreamFactoryInterface::class),
             $container->get(UploadedFileFactoryInterface::class, UploadedFileFactoryInterface::class),
         );
-        $http->chunkSize = $chunkSize;
-
-        return $http;
+        return new Psr7WorkerAdapter($http, $chunkSize);
     }
 }
