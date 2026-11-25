@@ -121,15 +121,47 @@ final readonly class ResponsePreparer
 
         $size = $body->getSize();
 
-        if (
-            $size !== null
-            && !$response->hasHeader('Content-Length')
-            && !$response->hasHeader('Transfer-Encoding')
-        ) {
+        if ($response->hasHeader('Content-Length')) {
+            return $this->validateContentLength($response, $size);
+        }
+
+        if ($size !== null && !$response->hasHeader('Transfer-Encoding')) {
             $response = $response->withHeader('Content-Length', (string) $size);
         }
 
         return $response;
+    }
+
+    private function validateContentLength(ResponseInterface $response, ?int $size): ResponseInterface
+    {
+        $length = null;
+        foreach (explode(',', $response->getHeaderLine('Content-Length')) as $value) {
+            $value = trim($value, " \t");
+            if (preg_match('/\A[0-9]+\z/', $value) !== 1) {
+                throw new InvalidArgumentException('Invalid RoadRunner response Content-Length.');
+            }
+
+            $canonical = ltrim($value, '0');
+            $canonical = $canonical === '' ? '0' : $canonical;
+
+            if ($length !== null && $length !== $canonical) {
+                throw new InvalidArgumentException('Conflicting RoadRunner response Content-Length values.');
+            }
+
+            $length = $canonical;
+        }
+
+        if ($size !== null && $length !== (string) $size) {
+            throw new InvalidArgumentException('RoadRunner response Content-Length does not match the body size.');
+        }
+
+        // A comma-separated list is non-empty, including when the input is
+        // an empty string (which is rejected above).
+        if ($length === null) {
+            throw new InvalidArgumentException('Missing RoadRunner response Content-Length.');
+        }
+
+        return $response->withHeader('Content-Length', $length);
     }
 
     private function copyToSeekableStream(StreamInterface $source): StreamInterface

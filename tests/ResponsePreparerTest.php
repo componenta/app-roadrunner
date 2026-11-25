@@ -331,3 +331,30 @@ it('transmits the complete seekable body in buffered mode even when the cursor i
     expect($binary->responses)->toHaveCount(1)
         ->and($binary->responses[0]->body)->toBe('abcdef');
 });
+
+it('rejects inconsistent or malformed explicit content lengths before transport', function (string $value): void {
+    expect(fn () => (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('GET', '/'),
+        new Response(200, ['Content-Length' => $value], 'abc'),
+    ))->toThrow(InvalidArgumentException::class);
+})->with(['2', '4', '-1', '1e0', '3, 4', '99999999999999999999999999999']);
+
+it('normalizes repeated identical content lengths without changing body bytes', function (): void {
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('GET', '/'),
+        new Response(200, ['Content-Length' => ['003', '3']], 'abc'),
+    );
+
+    expect($prepared->getHeader('Content-Length'))->toBe(['3'])
+        ->and((string) $prepared->getBody())->toBe('abc');
+});
+
+it('validates a declared length against the remaining bytes of a non-seekable body', function (): void {
+    $source = new NonSeekableStream(Stream::create('abcdef'));
+    $source->read(2);
+
+    expect(fn () => (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('GET', '/'),
+        new Response(200, ['Content-Length' => '6'], $source),
+    ))->toThrow(InvalidArgumentException::class);
+});
