@@ -69,6 +69,10 @@ final readonly class ResponsePreparer
         if ($response->getStatusCode() === 304) {
             // Metadata describes the selected representation, not a 304 body.
             // Preserve values supplied by the application; never infer them.
+            if ($response->hasHeader('Content-Length')) {
+                $response = $this->validateContentLength($response, null);
+            }
+
             return $response
                 ->withoutHeader('X-Sendfile')
                 ->withoutHeader('X-Accel-Redirect')
@@ -91,16 +95,17 @@ final readonly class ResponsePreparer
 
     private function prepareHead(ResponseInterface $response): ResponseInterface
     {
-        $body = $response->getBody();
+        if ($response->hasHeader('Content-Length')) {
+            // It describes the corresponding GET representation, which is not
+            // necessarily present in the HEAD response body.
+            $response = $this->validateContentLength($response, null);
+        } elseif (!$response->hasHeader('Transfer-Encoding')) {
+            $body = $response->getBody();
 
-        // A non-seekable stream may be partially consumed or have unknown
-        // length. Do not read it solely to compute optional HEAD metadata.
-        if ($body->isSeekable()
-            && !$response->hasHeader('Content-Length')
-            && !$response->hasHeader('Transfer-Encoding')
-            && ($size = $body->getSize()) !== null
-        ) {
-            $response = $response->withHeader('Content-Length', (string) $size);
+            // Do not consume a non-seekable stream to infer optional metadata.
+            if ($body->isSeekable() && ($size = $body->getSize()) !== null) {
+                $response = $response->withHeader('Content-Length', (string) $size);
+            }
         }
 
         return $response->withBody($this->streamFactory->createStream());

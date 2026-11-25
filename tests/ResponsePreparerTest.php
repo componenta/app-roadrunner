@@ -358,3 +358,30 @@ it('validates a declared length against the remaining bytes of a non-seekable bo
         new Response(200, ['Content-Length' => '6'], $source),
     ))->toThrow(InvalidArgumentException::class);
 });
+
+it('rejects invalid representation content length on HEAD and 304 responses', function (string $method, int $status, string $length): void {
+    expect(fn () => (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest($method, '/'),
+        new Response($status, ['Content-Length' => $length]),
+    ))->toThrow(InvalidArgumentException::class);
+})->with([
+    ['HEAD', 200, '-1'],
+    ['HEAD', 200, '3, 4'],
+    ['GET', 304, '3, 4'],
+    ['GET', 304, '1e3'],
+]);
+
+it('normalizes equivalent representation lengths without reading a suppressed body', function (string $method, int $status): void {
+    $stream = new NonSeekableStream(Stream::create('abc'));
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest($method, '/'),
+        new Response($status, ['Content-Length' => ['012', '12']], $stream),
+    );
+
+    expect($prepared->getHeader('Content-Length'))->toBe(['12'])
+        ->and((string) $prepared->getBody())->toBe('')
+        ->and($stream->read(3))->toBe('abc');
+})->with([
+    ['HEAD', 200],
+    ['GET', 304],
+]);
