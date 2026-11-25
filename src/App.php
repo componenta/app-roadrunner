@@ -107,19 +107,11 @@ final class App implements AppInterface, HttpBootTargetInterface
                 unset($exception);
                 $terminate = true;
             } finally {
-                try {
-                    unset($request);
-                } catch (Throwable $exception) {
-                    $this->report($exception);
-                    unset($exception);
+                if (!$this->releaseSafely($request)) {
                     $terminate = true;
                 }
 
-                try {
-                    unset($response);
-                } catch (Throwable $exception) {
-                    $this->report($exception);
-                    unset($exception);
+                if (!$this->releaseSafely($response)) {
                     $terminate = true;
                 }
 
@@ -171,6 +163,18 @@ final class App implements AppInterface, HttpBootTargetInterface
             $container->get(ResponsePreparer::class, ResponsePreparer::class),
             $container->get(RequestResetterInterface::class, RequestResetterInterface::class),
         );
+    }
+
+    private function releaseSafely(?object &$value): bool
+    {
+        try {
+            // Releasing the last reference may invoke arbitrary user code.
+            $value = null;
+            return true;
+        } catch (Throwable $exception) { // @phpstan-ignore catch.neverThrown (PHP destructors can throw.)
+            $this->report($exception);
+            return false;
+        }
     }
 
     private function respondWithStatus(int $status, string $reasonPhrase): bool
