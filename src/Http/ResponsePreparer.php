@@ -98,7 +98,6 @@ final readonly class ResponsePreparer
     private function prepareFull(ResponseInterface $response): ResponseInterface
     {
         $body = $response->getBody();
-        $supportsRanges = $body->isSeekable();
 
         if (!$body->isReadable()) {
             throw new InvalidArgumentException('RoadRunner response body must be readable.');
@@ -117,10 +116,6 @@ final readonly class ResponsePreparer
             && !$response->hasHeader('Transfer-Encoding')
         ) {
             $response = $response->withHeader('Content-Length', (string) $size);
-        }
-
-        if (!$response->hasHeader('Accept-Ranges') && $size !== null && $supportsRanges) {
-            $response = $response->withHeader('Accept-Ranges', 'bytes');
         }
 
         return $response;

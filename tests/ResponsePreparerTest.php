@@ -27,7 +27,7 @@ it('preserves SAPI semantics for full, HEAD and bodyless responses', function ()
     );
 
     expect($full->getHeaderLine('Content-Length'))->toBe('6')
-        ->and($full->getHeaderLine('Accept-Ranges'))->toBe('bytes')
+        ->and($full->hasHeader('Accept-Ranges'))->toBeFalse()
         ->and((string) $full->getBody())->toBe('abcdef')
         ->and($head->getHeaderLine('Content-Length'))->toBe('6')
         ->and((string) $head->getBody())->toBe('')
@@ -215,3 +215,21 @@ it('preserves explicit HEAD representation metadata without inspecting the body'
         ->and($prepared->getHeaderLine('Content-Type'))->toBe('text/plain')
         ->and($source->read(7))->toBe('forward');
 });
+
+it('does not advertise byte ranges merely because a response stream is seekable', function (): void {
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('GET', '/'),
+        new Response(200, [], 'abc'),
+    );
+
+    expect($prepared->hasHeader('Accept-Ranges'))->toBeFalse();
+});
+
+it('preserves explicit application range support', function (string $value): void {
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        new ServerRequest('GET', '/'),
+        new Response(200, ['Accept-Ranges' => $value], 'abc'),
+    );
+
+    expect($prepared->getHeaderLine('Accept-Ranges'))->toBe($value);
+})->with(['bytes', 'none']);
