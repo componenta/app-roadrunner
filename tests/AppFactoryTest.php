@@ -154,14 +154,14 @@ it('selects the HTTP runtime through DI for both provider orders', function (str
             $composition = (new \Componenta\Config\ConfigFactory())->create(new \Componenta\Config\Environment([]), ...$providers);
             $container = (new \Componenta\DI\ContainerFactory())->create($composition->config, $composition->dependencies);
             $app = $container->get(AppFactoryInterface::class)->createApp(Scope::HTTP, $container);
-            expect($app)->toBeInstanceOf($mode === 'http' ? RoadRunnerApp::class : SapiApp::class);
-            if ($mode === 'sapi') { expect($app)->toBe($services[SapiApp::class]); }
+            expect($app)->toBeInstanceOf(strtolower(trim($mode)) === 'http' ? RoadRunnerApp::class : SapiApp::class);
+            if (strtolower(trim($mode)) !== 'http') { expect($app)->toBe($services[SapiApp::class]); }
             else { expect((new HttpBootTargetAdapter())->create($app, Scope::HTTP))->toBe($app); }
         }
     } finally {
         if ($hadMode) { $_SERVER['RR_MODE'] = $previous; } else { unset($_SERVER['RR_MODE']); }
     }
-})->with(['http', 'sapi']);
+})->with(['http', ' HTTP ', 'sapi', 'jobs', '']);
 
 it('selects RoadRunner only inside an HTTP worker and uses the app as boot target', function (): void {
     $hadMode = array_key_exists('RR_MODE', $_SERVER);

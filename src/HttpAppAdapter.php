@@ -7,6 +7,7 @@ namespace Componenta\App\RoadRunner;
 use Componenta\App\AppAdapterInterface;
 use Componenta\App\AppInterface;
 use Componenta\App\Scope;
+use Componenta\App\RoadRunner\Worker\WorkerMode;
 use Componenta\Config\ContainerValue;
 use Componenta\Scope\ScopeInterface;
 
@@ -21,8 +22,7 @@ final readonly class HttpAppAdapter implements AppAdapterInterface
 
     public function createApp(ScopeInterface $scope, ContainerValue $container): AppInterface
     {
-        $mode = $_SERVER['RR_MODE'] ?? $_ENV['RR_MODE'] ?? getenv('RR_MODE');
-        if ($scope->matches(Scope::HTTP) && is_string($mode) && strtolower(trim($mode)) === 'http') {
+        if ($scope->matches(Scope::HTTP) && WorkerMode::isHttp()) {
             return App::createFromContainer($container);
         }
         return $this->fallback->createApp($scope, $container);
