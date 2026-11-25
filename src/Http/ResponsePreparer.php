@@ -140,7 +140,7 @@ final readonly class ResponsePreparer
             $chunk = $source->read(self::COPY_CHUNK_SIZE);
 
             if ($chunk === '') {
-                if (!$source->eof()) {
+                if (!$this->isAtEnd($source)) {
                     throw new RuntimeException('RoadRunner response stream made no progress before EOF.');
                 }
 
@@ -153,6 +153,15 @@ final readonly class ResponsePreparer
         $target->rewind();
 
         return $target;
+    }
+
+    /**
+     * A read can change EOF even if the stream object remains the same.
+     * @phpstan-impure
+     */
+    private function isAtEnd(StreamInterface $source): bool
+    {
+        return $source->eof();
     }
 
     private function writeAll(StreamInterface $target, string $contents): void

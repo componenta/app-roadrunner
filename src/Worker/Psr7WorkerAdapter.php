@@ -75,6 +75,15 @@ final readonly class Psr7WorkerAdapter implements PSR7WorkerInterface
         }
     }
 
+    /**
+     * Stream reads can change EOF without changing the stream object.
+     * @phpstan-impure
+     */
+    private function isAtEnd(StreamInterface $body): bool
+    {
+        return $body->eof();
+    }
+
     /** @return Generator<int, string, mixed, string> */
     private function chunks(StreamInterface $body, ?Throwable &$failure): Generator
     {
@@ -84,14 +93,14 @@ final readonly class Psr7WorkerAdapter implements PSR7WorkerInterface
                 $chunk = $body->read($this->chunkSize);
 
                 if ($chunk === '') {
-                    if (!$body->eof()) {
+                    if (!$this->isAtEnd($body)) {
                         throw new RuntimeException('RoadRunner response stream made no progress before EOF.');
                     }
 
                     break;
                 }
 
-                if ($body->eof()) {
+                if ($this->isAtEnd($body)) {
                     return $chunk;
                 }
 

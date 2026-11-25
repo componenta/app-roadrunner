@@ -247,16 +247,21 @@ final class App implements AppInterface, HttpBootTargetInterface
      */
     private function outputBufferSignature(): array
     {
-        return array_map(
-            static fn (array $buffer): array => [
+        /** @var list<array{name: string, type: int, flags: int, level: int, chunk_size: int, buffer_size: int, buffer_used: int}> $buffers */
+        $buffers = ob_get_status(true);
+        $signature = [];
+
+        foreach ($buffers as $buffer) {
+            $signature[] = [
                 'name' => $buffer['name'],
                 'type' => $buffer['type'],
                 'flags' => $buffer['flags'] & PHP_OUTPUT_HANDLER_STDFLAGS,
                 'level' => $buffer['level'],
                 'chunk_size' => $buffer['chunk_size'],
-            ],
-            array_values(ob_get_status(true)),
-        );
+            ];
+        }
+
+        return $signature;
     }
 
     private function report(Throwable $exception): void
