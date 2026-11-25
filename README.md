@@ -85,7 +85,9 @@ An unhandled pipeline exception becomes an empty generic `500` response. Recogni
 request data becomes an empty generic `400`. Unexpected receive failures are
 not answered because the relay may be out of sync. A transport or cleanup
 failure exits the worker with code `1`, allowing RoadRunner to replace a process
-whose state is no longer trusted.
+whose state is no longer trusted. The pipeline must return one final response.
+A standalone informational status (1xx), including a protocol upgrade (101),
+is not supported by this HTTP lifecycle and becomes a generic `500` response.
 
 ## Request state
 
@@ -176,6 +178,21 @@ identical to those passed to Componenta's SAPI emitter.
 A `206` response must already contain the selected range in its PSR-7 body. The
 preparer transfers that body without applying the representation offset again.
 It preserves explanatory bodies on `416` responses and suppresses content on `205`.
+
+### Streaming failures
+
+Once response headers have been sent, PHP cannot change the HTTP status.
+A stream read failure is logged and the worker is discarded. RoadRunner owns
+the client connection and HTTP framing. Process tests with RoadRunner
+2025.1.15 demonstrate that a client detects a shortened response when a
+correct `Content-Length` is known, but a failed stream without a declared
+length can appear to finish successfully with a partial body. Worker replacement
+does not guarantee that a client detects this truncation.
+
+For responses requiring detection of incomplete transfers, use a reliable
+known-length representation or application-level integrity validation.
+Use `chunk_size: 0` to read the complete body before sending any response
+bytes (at the cost of buffering).
 
 To use `X-Sendfile`, enable RoadRunner's sendfile middleware:
 

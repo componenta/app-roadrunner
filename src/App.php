@@ -199,6 +199,13 @@ final class App implements AppInterface, HttpBootTargetInterface
         ResponseInterface $response,
     ): bool {
         try {
+            // A PSR-15 pipeline returns one final response. Informational
+            // statuses require a subsequent final response (or a protocol
+            // upgrade), which this HTTP worker lifecycle does not provide.
+            if ($response->getStatusCode() < 200) {
+                throw new InvalidArgumentException('The HTTP application must return a final response.');
+            }
+
             $response = $this->responsePreparer->prepare($request, $response);
         } catch (Throwable $exception) {
             $this->report($exception);
