@@ -10,12 +10,11 @@ The package targets:
 - `spiral/roadrunner-http` `^4.1`;
 - `spiral/roadrunner-worker` `^3.5`.
 
-The active Componenta scope remains `Scope::HTTP`. No Componenta source patch is
-required: `ConfigProvider` replaces Componenta's concrete `AppFactory` service.
-The standard `componenta/app-http` adapter accepts applications that already
-implement `HttpBootTargetInterface`. The RoadRunner factory delegates to
-Componenta's default factory outside `RR_MODE=http`, preserving the standard
-SAPI and CLI applications.
+The active Componenta scope remains `Scope::HTTP`. The provider selects an
+alternative HTTP runtime service without replacing the shared application factory.
+The runtime factory constructs only the selected RoadRunner or SAPI application.
+The standard HTTP boot target wraps both implementations and never exposes
+their run entry points. CLI and WebSocket registrations are independent.
 
 The package uses only public Componenta and RoadRunner contracts. Cycle is not a
 dependency and its private state is never inspected. Applications using mutable

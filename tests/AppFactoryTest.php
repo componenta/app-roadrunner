@@ -9,7 +9,9 @@ use Componenta\App\Boot\Target\HttpBootTargetInterface;
 use Componenta\App\ConfigKey as AppConfigKey;
 use Componenta\App\ConfigProvider as AppConfigProvider;
 use Componenta\App\RoadRunner\App as RoadRunnerApp;
-use Componenta\App\RoadRunner\AppFactory as RoadRunnerAppFactory;
+use Componenta\App\AppInterface;
+use Componenta\App\RoadRunner\ConfigKey as RoadRunnerConfigKey;
+use Componenta\App\RoadRunner\HttpRuntimeFactory;
 use Componenta\App\RoadRunner\ConfigProvider;
 use Componenta\App\RoadRunner\Http\ResponsePreparer;
 use Componenta\App\RoadRunner\Reset\RequestResetterFactory;
@@ -23,7 +25,8 @@ use Componenta\App\RoadRunner\Worker\Psr7WorkerFactory;
 use Componenta\App\Scope;
 use Componenta\App\Server\App as SapiApp;
 use Componenta\App\Server\ConfigProvider as HttpConfigProvider;
-use Componenta\App\Server\HttpAppAdapter;
+use Componenta\App\Server\ConfigKey as HttpConfigKey;
+use Componenta\App\Server\HttpApplicationInterface;
 use Componenta\Config\Config;
 use Componenta\Config\ContainerValue;
 use Componenta\Http\EmitterInterface;
@@ -89,13 +92,12 @@ function roadRunnerAppFactoryServices(): array
 function roadRunnerAppFactoryContainer(): ContainerValue
 {
     $config = [
-        AppConfigKey::APP_ADAPTERS => [HttpAppAdapter::class],
+        AppConfigKey::APPLICATIONS => [Scope::HTTP->value => HttpApplicationInterface::class],
     ];
 
     return new ContainerValue(
         new ServiceContainer([
             ...roadRunnerAppFactoryServices(),
-            HttpAppAdapter::class => new HttpAppAdapter(),
         ]),
         new Config($config, new \Componenta\Config\Environment([])),
     );
@@ -105,7 +107,8 @@ it('declares each integration service with its actual creation strategy', functi
     $config = (new ConfigProvider())();
     $dependencies = $config['dependencies'];
 
-    expect($dependencies['delegators'])->toHaveKey(\Componenta\App\Server\HttpAppAdapter::class)
+    expect($config[HttpConfigKey::RUNTIME])->toBe(RoadRunnerConfigKey::HTTP_RUNTIME_SERVICE)
+        ->and($dependencies['factories'][RoadRunnerConfigKey::HTTP_RUNTIME_SERVICE])->toBe(HttpRuntimeFactory::class)
         ->and($dependencies['aliases'] ?? [])->not->toHaveKey(DefaultAppFactory::class)
         ->and($dependencies['invokables'])->toBe([
             Psr7WorkerFactory::class,
@@ -147,32 +150,36 @@ it('selects the HTTP runtime through DI for both provider orders', function (str
             [new ConfigProvider(), new AppConfigProvider(), new HttpConfigProvider()],
         ] as $providers) {
             $services = roadRunnerAppFactoryServices();
-            $providers[] = static fn (): array => ['dependencies' => ['factories' => array_map(
-                static fn (object $entry): Closure => static fn (): object => $entry,
-                $services,
-            )]];
+            $factories = array_map(static fn (object $entry): Closure => static fn (): object => $entry, $services);
+            $inactive = $mode === 'http' ? SapiApp::class : PSR7WorkerInterface::class;
+            $factories[$inactive] = static fn () => throw new LogicException('Inactive HTTP runtime was resolved.');
+            $providers[] = static fn (): array => ['dependencies' => ['factories' => $factories]];
             $composition = (new \Componenta\Config\ConfigFactory())->create(new \Componenta\Config\Environment([]), ...$providers);
             $container = (new \Componenta\DI\ContainerFactory())->create($composition->config, $composition->dependencies);
             $app = $container->get(AppFactoryInterface::class)->createApp(Scope::HTTP, $container);
             expect($app)->toBeInstanceOf($mode === 'http' ? RoadRunnerApp::class : SapiApp::class);
             if ($mode === 'sapi') { expect($app)->toBe($services[SapiApp::class]); }
-            else { expect((new HttpBootTargetAdapter())->create($app, Scope::HTTP))->toBe($app); }
+            $target = (new HttpBootTargetAdapter())->create($app, Scope::HTTP);
+            expect($target)->toBeInstanceOf(HttpBootTargetInterface::class)
+                ->not->toBe($app)
+                ->not->toBeInstanceOf(AppInterface::class)
+                ->and(is_callable([$target, 'run']))->toBeFalse();
         }
     } finally {
         if ($hadMode) { $_SERVER['RR_MODE'] = $previous; } else { unset($_SERVER['RR_MODE']); }
     }
 })->with(['http', 'sapi']);
 
-it('selects RoadRunner only inside an HTTP worker and uses the app as boot target', function (): void {
+it('selects RoadRunner only inside an HTTP worker and encapsulates the application in its boot target', function (): void {
     $hadMode = array_key_exists('RR_MODE', $_SERVER);
     $mode = $_SERVER['RR_MODE'] ?? null;
     $_SERVER['RR_MODE'] = 'http';
 
     try {
-        $app = (new RoadRunnerAppFactory())->createApp(Scope::HTTP, roadRunnerAppFactoryContainer());
+        $app = (new HttpRuntimeFactory())(roadRunnerAppFactoryContainer());
 
         expect($app)->toBeInstanceOf(RoadRunnerApp::class)
-            ->and((new HttpBootTargetAdapter())->create($app, Scope::HTTP))->toBe($app);
+            ->and((new HttpBootTargetAdapter())->create($app, Scope::HTTP))->not->toBe($app);
     } finally {
         if ($hadMode) {
             $_SERVER['RR_MODE'] = $mode;
@@ -188,7 +195,7 @@ it('preserves the standard SAPI HTTP app outside RoadRunner', function (): void 
     $_SERVER['RR_MODE'] = 'sapi';
 
     try {
-        $app = (new RoadRunnerAppFactory())->createApp(Scope::HTTP, roadRunnerAppFactoryContainer());
+        $app = (new HttpRuntimeFactory())(roadRunnerAppFactoryContainer());
         $target = (new HttpBootTargetAdapter())->create($app, Scope::HTTP);
 
         expect($app)->toBeInstanceOf(SapiApp::class)

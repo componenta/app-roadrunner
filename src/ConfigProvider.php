@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace Componenta\App\RoadRunner;
 
-use Componenta\App\AppAdapterInterface;
-use Componenta\App\Server\HttpAppAdapter as SapiHttpAppAdapter;
+use Componenta\App\Server\ConfigKey as HttpConfigKey;
 use Componenta\App\RoadRunner\Http\ResponsePreparer;
 use Componenta\App\RoadRunner\Reset\RequestResetterFactory;
 use Componenta\App\RoadRunner\Reset\RequestResetterInterface;
@@ -20,6 +19,7 @@ final class ConfigProvider extends BaseConfigProvider
     protected function getFactories(): array
     {
         return [
+            ConfigKey::HTTP_RUNTIME_SERVICE => HttpRuntimeFactory::class,
             PSR7WorkerInterface::class => Psr7WorkerFactory::class,
             RequestResetterInterface::class => RequestResetterFactory::class,
             ResponsePreparer::class => static fn (ContainerValue $container): ResponsePreparer => new ResponsePreparer(
@@ -36,21 +36,11 @@ final class ConfigProvider extends BaseConfigProvider
         ];
     }
 
-    protected function getDelegators(): array
-    {
-        return [
-            SapiHttpAppAdapter::class => [
-                static fn (AppAdapterInterface $inner): AppAdapterInterface => new HttpAppAdapter($inner),
-            ],
-        ];
-    }
-
-    /**
-     * @return array{roadrunner: array{http: array{chunk_size: int}, worker: array{intercept_side_effects: bool}, resetters: list<string>}}
-     */
+    /** @return array<string, mixed> */
     protected function getConfig(): array
     {
         return [
+            HttpConfigKey::RUNTIME => ConfigKey::HTTP_RUNTIME_SERVICE,
             ConfigKey::ROOT => [
                 'http' => ['chunk_size' => 0],
                 'worker' => ['intercept_side_effects' => true],

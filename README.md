@@ -30,7 +30,7 @@ cp vendor/componenta/app-roadrunner/resources/.rr.yaml .rr.yaml
 
 The Componenta Composer plugin discovers
 `Componenta\App\RoadRunner\ConfigProvider` from the package metadata. If the
-application maintains its provider list manually, add this provider after the
+application maintains its provider list manually, add this provider together with the
 standard `Componenta\App\Server\ConfigProvider`.
 
 Rebuild Componenta's production cache after installing the package or changing
@@ -54,13 +54,12 @@ Start the server:
 
 ## Runtime selection
 
-The provider decorates `Componenta\App\Server\HttpAppAdapter` through DI with
-`Componenta\App\RoadRunner\HttpAppAdapter`. The shared application factory selects
-the HTTP adapter normally. It creates the RoadRunner app when `RR_MODE=http` and
-delegates to the original HTTP adapter outside a worker. Provider order does not
-change this selection; CLI and WebSocket adapters retain their behavior. The RoadRunner app implements
-`HttpBootTargetInterface` directly, and the standard `componenta/app-http`
-adapter uses it without an integration-specific adapter.
+The provider configures the HTTP runtime service. The shared application factory
+resolves the service registered for the HTTP scope. It creates the RoadRunner
+application when `RR_MODE=http` and resolves the ordinary SAPI application otherwise.
+Only the selected runtime is constructed; provider order does not affect selection.
+CLI and WebSocket registrations remain independent. The standard HTTP boot target
+always wraps the runnable application and exposes middleware configuration only.
 
 There is no separate RoadRunner scope and no manual `always` mode. Starting the
 RoadRunner app without the RoadRunner worker protocol would be invalid, while
@@ -182,7 +181,7 @@ http:
 ## Public API
 
 - `ConfigProvider` wires the integration into Componenta's application factory.
-- `App` is the long-running HTTP application and also its HTTP boot target.
+- `App` is the long-running HTTP application and is not exposed as the HTTP boot target.
 - `RequestResetterInterface` is the application cleanup extension point.
 - `ResetFailedException` exposes all cleanup failures through its `failures`
   property.

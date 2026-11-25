@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace Componenta\App\RoadRunner;
 
-use Componenta\App\AppInterface;
-use Componenta\App\Boot\Target\HttpBootTargetInterface;
+use Componenta\App\Server\HttpApplicationInterface;
 use Componenta\App\Exception\MiddlewarePipeException;
 use Componenta\App\RoadRunner\Http\ResponsePreparer;
 use Componenta\App\RoadRunner\Reset\RequestResetterInterface;
@@ -24,7 +23,7 @@ use Spiral\RoadRunner\Http\PSR7WorkerInterface;
 use RuntimeException;
 use Throwable;
 
-final class App implements AppInterface, HttpBootTargetInterface
+final class App implements HttpApplicationInterface
 {
     /** @var list<array{middleware: MiddlewareInterface, priority: int, order: int}> */
     private array $middlewares = [];
