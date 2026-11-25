@@ -14,7 +14,8 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 RR = Path(sys.argv[1]).resolve()
-ITERATIONS = 1000
+ITERATIONS = 10_000
+LARGE_SIZE = 16 * 1024 * 1024
 
 
 def free_port():
@@ -32,6 +33,10 @@ def exercise(chunk_size):
         shutil.copy(ROOT / "resources/bin/roadrunner.php", root / "bin/roadrunner.php")
         for name in ("container.php", "pipeline.php"):
             shutil.copy(ROOT / "tests/Integration" / name, root / "config" / name)
+        pattern = b"0123456789abcdef" * 65536
+        with (root / "config" / "large.bin").open("wb") as file:
+            for _ in range(LARGE_SIZE // len(pattern)):
+                file.write(pattern)
         port = free_port()
         (root / ".rr.yaml").write_text(f"""version: "3"
 server:
@@ -101,12 +106,39 @@ logs:
                 payload = b"--smoke\r\nContent-Disposition: form-data; name=\"document\"; filename=\"test.txt\"\r\nContent-Type: text/plain\r\n\r\nupload-content\r\n--smoke--\r\n"
                 status, headers, body = request("/upload", "POST", payload, {"Content-Type": "multipart/form-data; boundary=smoke"})
                 assert (status, body) == (200, b"upload-content")
+                assert check("/large", 200, b"", method="HEAD")["content-length"] == str(LARGE_SIZE)
                 status, headers, body = request("/large")
                 assert status == 200 and headers["x-worker-pid"] == pid
-                assert hashlib.sha256(body).digest() == hashlib.sha256(b"0123456789abcdef" * 65536).digest()
+                assert len(body) == LARGE_SIZE
+                with (root / "config" / "large.bin").open("rb") as file:
+                    assert hashlib.sha256(body).digest() == hashlib.file_digest(file, "sha256").digest()
+                status, headers, body = request("/metrics")
+                assert status == 200 and headers["x-worker-pid"] == pid
+                print(f"chunk_size={chunk_size} file_bytes={LARGE_SIZE} php_file_peak={json.loads(body)['peak']}", flush=True)
+
+                # In streaming mode close an actual HTTP client before consuming
+                # the file. The server must continue serving healthy requests.
+                if chunk_size > 0:
+                    with socket.create_connection(("127.0.0.1", port), timeout=10) as aborted:
+                        aborted.sendall(b"GET /large HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+                        assert aborted.recv(4096)
+                    deadline = time.monotonic() + 15
+                    while time.monotonic() < deadline:
+                        try:
+                            status, headers, body = request("/full")
+                            if status == 200:
+                                assert body == b"abcdef"
+                                pid = headers["x-worker-pid"]
+                                break
+                        except (OSError, http.client.HTTPException):
+                            conn.close()
+                        time.sleep(.1)
+                    else:
+                        raise AssertionError("Server did not recover after a client disconnected")
 
                 samples = []
                 memory = []
+                rss = []
                 for i in range(ITERATIONS + 100):
                     identity = str(i)
                     start = time.perf_counter_ns()
@@ -118,11 +150,19 @@ logs:
                     if i >= 100:
                         samples.append(elapsed)
                         memory.append(data["memory"])
+                        if i % 100 == 0:
+                            # Linux CI: PHP worker RSS, separate from the Zend allocator.
+                            for line in Path(f"/proc/{pid}/status").read_text().splitlines():
+                                if line.startswith("VmRSS:"):
+                                    rss.append(int(line.split()[1]) * 1024)
+                                    break
                 assert max(memory) - min(memory) <= 8 * 1024 * 1024, memory[-10:]
+                assert rss and max(rss) - min(rss) <= 32 * 1024 * 1024, rss[-10:]
                 ordered = sorted(samples)
                 print(f"chunk_size={chunk_size} requests={ITERATIONS} pid={pid} p50_ms={statistics.median(samples):.3f} "
                       f"p95_ms={ordered[int(.95 * len(ordered))-1]:.3f} p99_ms={ordered[int(.99 * len(ordered))-1]:.3f} "
-                      f"php_allocated_memory_min={min(memory)} max={max(memory)}", flush=True)
+                      f"php_allocated_memory_min={min(memory)} max={max(memory)} "
+                      f"worker_rss_min={min(rss)} max={max(rss)}", flush=True)
 
                 check("/reset-failure", 200, b"discard")
                 deadline = time.monotonic() + 15

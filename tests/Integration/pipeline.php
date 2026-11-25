@@ -41,6 +41,19 @@ $app->pipe(new CallableMiddleware(static function (ServerRequestInterface $reque
         return new Response(200, $headers, 'clean');
     }
 
+    if ($path === '/metrics') {
+        return new Response(200, $headers, json_encode([
+            'used' => memory_get_usage(false),
+            'allocated' => memory_get_usage(true),
+            'peak' => memory_get_peak_usage(true),
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    if ($path === '/large') {
+        memory_reset_peak_usage();
+        return new Response(200, $headers, Stream::create(fopen(__DIR__ . '/large.bin', 'rb')));
+    }
+
     if ($path === '/upload') {
         $file = $request->getUploadedFiles()['document'];
         return new Response(200, $headers, $file->getStream()->getContents());
@@ -51,7 +64,6 @@ $app->pipe(new CallableMiddleware(static function (ServerRequestInterface $reque
         '/partial' => new Response(206, $headers + ['Content-Range' => 'bytes 10-12/20'], 'abc'),
         '/no-content' => new Response(204, $headers, 'ignored'),
         '/not-modified' => new Response(304, $headers + ['ETag' => '"v1"', 'Content-Length' => '6'], 'ignored'),
-        '/large' => new Response(200, $headers, Stream::create(str_repeat('0123456789abcdef', 65536))),
         default => new Response(404, $headers),
     };
 }));
