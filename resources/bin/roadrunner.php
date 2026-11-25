@@ -25,7 +25,9 @@ ob_start(static function (string $chunk, int $_phase): string {
 error_reporting(E_ALL);
 ini_set('display_errors', 'stderr');
 set_error_handler(static function (int $errno, string $message, string $file, int $line): bool {
-    if ((error_reporting() & $errno) === 0) {
+    // Deprecations are diagnostic; they must not prevent a supported
+    // dependency from loading. PHP reports them to stderr normally.
+    if ((error_reporting() & $errno) === 0 || ($errno & (E_DEPRECATED | E_USER_DEPRECATED)) !== 0) {
         return false;
     }
 

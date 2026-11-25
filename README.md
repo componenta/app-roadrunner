@@ -196,7 +196,8 @@ A 304 response preserves explicitly provided representation metadata, including
 content length are normalized by removing content length.
 
 The bundled entry point uses a non-removable output guard and honors PHP's
-error reporting mask. Direct writes to STDOUT are still forbidden. The runtime
+error reporting mask. Deprecations are reported by PHP without becoming worker
+failures. Direct writes to STDOUT are still forbidden. The runtime
 checks the structure of persistent output buffers; it cannot identify every
 replacement by an identical PHP handler. Application code must not modify
 persistent runtime buffers or retain per-request state in other PHP globals.

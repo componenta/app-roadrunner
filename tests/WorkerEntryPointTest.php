@@ -68,3 +68,13 @@ it('prevents requests from removing the permanent protocol output guard', functi
         ->and($stdout)->toBe('')
         ->and($stderr)->toContain('guarded-output');
 });
+
+it('reports deprecations without turning them into worker failures', function (): void {
+    [$code, $stdout, $stderr] = runRoadRunnerEntryPoint(
+        'trigger_error("deprecated-contract", E_USER_DEPRECATED); echo "still-running";',
+    );
+
+    expect($code)->toBe(0)
+        ->and($stdout)->toBe('')
+        ->and($stderr)->toContain('deprecated-contract', 'still-running');
+});
