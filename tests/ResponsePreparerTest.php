@@ -439,3 +439,19 @@ it('does not read an unknown-size seekable body without a declared length', func
 
     expect($prepared->hasHeader('Content-Length'))->toBeFalse();
 });
+
+it('suppresses content only for the case-sensitive HEAD method', function (string $method, string $expected): void {
+    $request = new ServerRequest($method, '/');
+    $prepared = (new ResponsePreparer(new Psr17Factory()))->prepare(
+        $request,
+        new Response(200, [], 'abcdef'),
+    );
+
+    expect($request->getMethod())->toBe($method)
+        ->and((string) $prepared->getBody())->toBe($expected)
+        ->and($prepared->getHeaderLine('Content-Length'))->toBe('6');
+})->with([
+    'standard HEAD' => ['HEAD', ''],
+    'lowercase extension method' => ['head', 'abcdef'],
+    'mixed-case extension method' => ['Head', 'abcdef'],
+]);
