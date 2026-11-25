@@ -3,14 +3,14 @@ name: Release
 on:
   push:
     branches:
-      - main
+      - '**'
+  pull_request:
 
 permissions:
   contents: read
 
 jobs:
   verify:
-    if: startsWith(github.event.head_commit.message, 'Release v')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -24,12 +24,24 @@ jobs:
           coverage: none
           tools: composer:v2
       - run: composer validate --strict
-      - run: composer install --no-interaction --prefer-dist
+      - run: composer update --no-interaction --prefer-dist
+      - run: composer check
+
+  lowest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+      - run: composer update --prefer-lowest --prefer-stable --no-interaction --prefer-dist
       - run: composer check
 
   publish:
-    if: startsWith(github.event.head_commit.message, 'Release v')
-    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'Release v')
+    needs: [verify, lowest]
     runs-on: ubuntu-latest
     permissions:
       contents: write
