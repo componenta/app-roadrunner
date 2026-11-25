@@ -51,6 +51,7 @@ final class App implements AppInterface, HttpBootTargetInterface
 
         // GlobalState is loaded while the container is assembled. Refresh its
         // baseline after all Componenta bootloaders have finished.
+        $serverBaseline = $_SERVER;
         GlobalState::cacheServerVars();
 
         while (true) {
@@ -62,7 +63,7 @@ final class App implements AppInterface, HttpBootTargetInterface
                 unset($exception);
 
                 $responded = $this->respondWithStatus(400, 'Bad Request');
-                $reset = $this->resetSafely($outputBuffers);
+                $reset = $this->resetSafely($outputBuffers, $serverBaseline);
 
                 if (!$responded || !$reset) {
                     return 1;
@@ -74,12 +75,13 @@ final class App implements AppInterface, HttpBootTargetInterface
                 // or the relay is no longer synchronized. Do not write a frame.
                 $this->report($exception);
                 unset($exception);
-                $this->resetSafely($outputBuffers);
+                $this->resetSafely($outputBuffers, $serverBaseline);
 
                 return 1;
             }
 
             if ($request === null) {
+                $_SERVER = $serverBaseline;
                 return null;
             }
 
@@ -101,7 +103,7 @@ final class App implements AppInterface, HttpBootTargetInterface
             } finally {
                 unset($request, $response);
 
-                if (!$this->resetSafely($outputBuffers)) {
+                if (!$this->resetSafely($outputBuffers, $serverBaseline)) {
                     $terminate = true;
                 }
             }
@@ -198,8 +200,11 @@ final class App implements AppInterface, HttpBootTargetInterface
         }
     }
 
-    /** @param list<array{name: string, type: int, flags: int, level: int, chunk_size: int}> $outputBuffers */
-    private function resetSafely(array $outputBuffers): bool
+    /**
+     * @param list<array{name: string, type: int, flags: int, level: int, chunk_size: int}> $outputBuffers
+     * @param array<array-key, mixed> $serverBaseline
+     */
+    private function resetSafely(array $outputBuffers, array $serverBaseline): bool
     {
         $outputBufferLevel = count($outputBuffers);
         $clean = true;
@@ -225,6 +230,10 @@ final class App implements AppInterface, HttpBootTargetInterface
             $this->report($exception);
             $clean = false;
         }
+
+        // Do not keep request headers or application mutations in $_SERVER
+        // while idle, including when a caller runs the application again.
+        $_SERVER = $serverBaseline;
 
         return $clean;
     }

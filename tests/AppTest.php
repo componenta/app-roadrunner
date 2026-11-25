@@ -271,3 +271,35 @@ it('reports each cleanup failure before discarding the worker', function (): voi
         unlink($path);
     }
 });
+
+it('restores the boot-time server state between requests and on worker exit', function (): void {
+    $previous = $_SERVER;
+    $_SERVER['RR_TEST_BASELINE'] = 'boot';
+    unset($_SERVER['RR_TEST_REQUEST']);
+    $seen = [];
+    $app = makeRoadRunnerApp(
+        new FakePsr7Worker([
+            new ServerRequest('GET', '/first'),
+            new ServerRequest('GET', '/second'),
+            null,
+        ]),
+        new FakePipelineFactory(static function () use (&$seen): Response {
+            $seen[] = [$_SERVER['RR_TEST_BASELINE'], $_SERVER['RR_TEST_REQUEST'] ?? null];
+            $_SERVER['RR_TEST_BASELINE'] = 'changed';
+            $_SERVER['RR_TEST_REQUEST'] = 'request-secret';
+
+            return new Response();
+        }),
+        new CountingResetter(),
+    );
+
+    try {
+        expect($app->run())->toBeNull()
+            ->and($seen)->toBe([['boot', null], ['boot', null]])
+            ->and($_SERVER['RR_TEST_BASELINE'])->toBe('boot')
+            ->and($_SERVER)->not->toHaveKey('RR_TEST_REQUEST');
+    } finally {
+        $_SERVER = $previous;
+        \Spiral\RoadRunner\Http\GlobalState::cacheServerVars();
+    }
+});
