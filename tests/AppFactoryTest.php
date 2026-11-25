@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 use Componenta\App\AppFactory as DefaultAppFactory;
 use Componenta\App\AppFactoryInterface;
+use Componenta\App\Boot\BootTargetAdapterInterface;
 use Componenta\App\Boot\HttpBootTargetAdapter;
+use Componenta\App\RoadRunner\Boot\HttpBootTargetAdapter as RoadRunnerBootTargetAdapter;
 use Componenta\App\Boot\Target\HttpBootTargetInterface;
 use Componenta\App\ConfigKey as AppConfigKey;
 use Componenta\App\ConfigProvider as AppConfigProvider;
@@ -105,7 +107,7 @@ it('declares each integration service with its actual creation strategy', functi
     $config = (new ConfigProvider())();
     $dependencies = $config['dependencies'];
 
-    expect($dependencies['delegators'])->toHaveKey(\Componenta\App\Server\HttpAppAdapter::class)
+    expect($dependencies['delegators'])->toHaveKeys([HttpAppAdapter::class, HttpBootTargetAdapter::class])
         ->and($dependencies['aliases'] ?? [])->not->toHaveKey(DefaultAppFactory::class)
         ->and($dependencies['invokables'])->toBe([
             Psr7WorkerFactory::class,
@@ -133,7 +135,7 @@ it('uses the shared app factory regardless of provider merge order', function ()
         $container = (new \Componenta\DI\ContainerFactory())->create($composition->config, $composition->dependencies);
 
         expect($container->get(AppFactoryInterface::class))->toBeInstanceOf(DefaultAppFactory::class)
-            ->and($container->get(HttpBootTargetAdapter::class))->toBeInstanceOf(HttpBootTargetAdapter::class);
+            ->and($container->get(HttpBootTargetAdapter::class))->toBeInstanceOf(BootTargetAdapterInterface::class);
     }
 });
 
@@ -156,14 +158,17 @@ it('selects the HTTP runtime through DI for both provider orders', function (str
             $app = $container->get(AppFactoryInterface::class)->createApp(Scope::HTTP, $container);
             expect($app)->toBeInstanceOf(strtolower(trim($mode)) === 'http' ? RoadRunnerApp::class : SapiApp::class);
             if (strtolower(trim($mode)) !== 'http') { expect($app)->toBe($services[SapiApp::class]); }
-            else { expect((new HttpBootTargetAdapter())->create($app, Scope::HTTP))->toBe($app); }
+            else {
+                $target = $container->get(\Componenta\App\Boot\BootTargetFactoryInterface::class)->create($app, Scope::HTTP);
+                expect($target)->toBeInstanceOf(HttpBootTargetInterface::class)->not->toBe($app);
+            }
         }
     } finally {
         if ($hadMode) { $_SERVER['RR_MODE'] = $previous; } else { unset($_SERVER['RR_MODE']); }
     }
 })->with(['http', ' HTTP ', 'sapi', 'jobs', '']);
 
-it('selects RoadRunner only inside an HTTP worker and uses the app as boot target', function (): void {
+it('selects RoadRunner only inside an HTTP worker and wraps its boot target', function (): void {
     $hadMode = array_key_exists('RR_MODE', $_SERVER);
     $mode = $_SERVER['RR_MODE'] ?? null;
     $_SERVER['RR_MODE'] = 'http';
@@ -171,8 +176,12 @@ it('selects RoadRunner only inside an HTTP worker and uses the app as boot targe
     try {
         $app = (new RoadRunnerAppFactory())->createApp(Scope::HTTP, roadRunnerAppFactoryContainer());
 
+        $target = (new RoadRunnerBootTargetAdapter(new HttpBootTargetAdapter()))->create($app, Scope::HTTP);
+
         expect($app)->toBeInstanceOf(RoadRunnerApp::class)
-            ->and((new HttpBootTargetAdapter())->create($app, Scope::HTTP))->toBe($app);
+            ->not->toBeInstanceOf(HttpBootTargetInterface::class)
+            ->and($target)->toBeInstanceOf(HttpBootTargetInterface::class)
+            ->not->toBe($app);
     } finally {
         if ($hadMode) {
             $_SERVER['RR_MODE'] = $mode;

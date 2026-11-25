@@ -20,7 +20,10 @@ The Composer manifest is the authoritative dependency contract.
 
 The provider decorates the standard HTTP application adapter rather than
 replacing the shared application factory. The active scope remains Scope::HTTP.
-The RoadRunner application implements HttpBootTargetInterface directly.
+The provider also decorates the standard HTTP boot target adapter. A separate
+HttpBootTargetInterface implementation wraps the RoadRunner application without
+exposing its run entry point. Code relying on the previous identity of the app
+and boot target must use the configured BootTargetFactoryInterface instead.
 The compatibility AppFactory delegates to the default factory outside an HTTP
 worker.
 

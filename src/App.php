@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Componenta\App\RoadRunner;
 
 use Componenta\App\AppInterface;
-use Componenta\App\Boot\Target\HttpBootTargetInterface;
 use Componenta\App\Exception\MiddlewarePipeException;
 use Componenta\App\RoadRunner\Http\ResponsePreparer;
 use Componenta\App\RoadRunner\Reset\RequestResetterInterface;
@@ -27,7 +26,7 @@ use JsonException;
 use RuntimeException;
 use Throwable;
 
-final class App implements AppInterface, HttpBootTargetInterface
+final class App implements AppInterface
 {
     /** @var list<array{middleware: MiddlewareInterface, priority: int, order: int}> */
     private array $middlewares = [];

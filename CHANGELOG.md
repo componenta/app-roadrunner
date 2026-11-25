@@ -9,6 +9,9 @@
 - Honor PHP error masks and protect the persistent output guard.
 - Report all cleanup failures and validate aggregate exceptions.
 - Share runtime detection and use the public RoadRunner streaming API.
+- Breaking: separate the HTTP boot target from the RoadRunner application.
+  Use the configured boot target factory instead of treating the application
+  itself as `HttpBootTargetInterface`.
 
 ## 3.0.0 - 2026-09-19
 

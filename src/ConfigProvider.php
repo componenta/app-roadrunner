@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Componenta\App\RoadRunner;
 
 use Componenta\App\AppAdapterInterface;
+use Componenta\App\Boot\BootTargetAdapterInterface;
+use Componenta\App\Boot\HttpBootTargetAdapter as SapiHttpBootTargetAdapter;
+use Componenta\App\RoadRunner\Boot\HttpBootTargetAdapter;
 use Componenta\App\Server\HttpAppAdapter as SapiHttpAppAdapter;
 use Componenta\App\RoadRunner\Http\ResponsePreparer;
 use Componenta\App\RoadRunner\Reset\RequestResetterFactory;
@@ -41,6 +44,9 @@ final class ConfigProvider extends BaseConfigProvider
         return [
             SapiHttpAppAdapter::class => [
                 static fn (AppAdapterInterface $inner): AppAdapterInterface => new HttpAppAdapter($inner),
+            ],
+            SapiHttpBootTargetAdapter::class => [
+                static fn (BootTargetAdapterInterface $inner): BootTargetAdapterInterface => new HttpBootTargetAdapter($inner),
             ],
         ];
     }

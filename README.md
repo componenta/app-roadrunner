@@ -57,9 +57,13 @@ The provider decorates `Componenta\App\Server\HttpAppAdapter` through DI with
 `Componenta\App\RoadRunner\HttpAppAdapter`. The shared application factory selects
 the HTTP adapter normally. It creates the RoadRunner app when `RR_MODE=http` and
 delegates to the original HTTP adapter outside a worker. Provider order does not
-change this selection; CLI and WebSocket adapters retain their behavior. The RoadRunner app implements
-`HttpBootTargetInterface` directly, and the standard `componenta/app-http`
-adapter uses it without an integration-specific adapter.
+change this selection; CLI and WebSocket adapters retain their behavior.
+The provider also decorates the standard HTTP boot target adapter. The
+RoadRunner application is wrapped in a separate `HttpBootTargetInterface`
+implementation, which exposes only middleware registration (`pipe()`).
+Bootloaders cannot access the application's `run()` through the boot target.
+Use the configured `BootTargetFactoryInterface` rather than manually
+constructing the SAPI boot target adapter for a RoadRunner application.
 
 There is no separate RoadRunner scope and no manual `always` mode. Starting the
 RoadRunner app without the RoadRunner worker protocol would be invalid, while
@@ -204,7 +208,8 @@ http:
 ## Public API
 
 - `ConfigProvider` wires the integration into Componenta's application factory.
-- `App` is the long-running HTTP application and also its HTTP boot target.
+- `App` is the long-running HTTP application. HTTP bootloaders use the existing
+  `HttpBootTargetInterface` through the configured boot target factory.
 - `RequestResetterInterface` is the application cleanup extension point.
 - `ResetFailedException` exposes all cleanup failures through its `failures`
   property.
